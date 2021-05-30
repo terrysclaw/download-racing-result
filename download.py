@@ -20,9 +20,9 @@ row = 1
 
 
 
-driver = webdriver.Chrome("C:\\Users\\TerryLaw\\todo\\download-racing-result\\chromedriver.exe")
+driver = webdriver.Chrome("C:\\Users\\terry\\todo\\download-racing-result\\chromedriver.exe")
 
-for date in pd.date_range(start="2020-09-01",end="2021-04-11"):
+for date in pd.date_range(start="2020-09-01",end="2021-05-30"):
     try:
 
         # driver.get("https://racing.hkjc.com/racing/information/Chinese/Racing/ResultsAll.aspx?RaceDate=2021/04/11")
