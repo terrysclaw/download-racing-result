@@ -20,7 +20,7 @@ cursor = cnx.cursor()
 
 driver = webdriver.Chrome("chromedriver.exe")
 
-driver.get("http://win.on.cc/ftpdata/marksix/2020.txt")
+driver.get("http://win.on.cc/ftpdata/marksix/2021.txt")
 
 sleep(3)
 
