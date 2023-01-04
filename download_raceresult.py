@@ -13,23 +13,17 @@ worksheet = workbook.add_worksheet()
 worksheet.write('A1', 'Date')
 worksheet.write('B1', 'Race No')
 worksheet.write('C1', 'Race')
-worksheet.write('M1', '1-3P')
-worksheet.write('N1', '1-3Q')
-worksheet.write('O1', '1-5P')
-worksheet.write('P1', '1-5Q')
-worksheet.write('Q1', '潘莫P')
-worksheet.write('R1', '潘莫田P')
-worksheet.write('S1', '潘莫Q')
-worksheet.write('T1', '潘莫田Q')
-worksheet.write('U1', 'Win')
-
+worksheet.write('M1', '1-4Q')
+worksheet.write('N1', '5-9Q')
+worksheet.write('O1', '10-14Q')
+worksheet.write('P1', 'Win')
+worksheet.write('Q1', 'Qin')
 
 row = 1
 
-# driver = webdriver.Chrome("C:\\Users\\terry\\todo\\download-racing-result\\chromedriver.exe")
 driver = webdriver.Chrome("chromedriver.exe")
 
-for date in pd.date_range(start="2021-09-05",end="2022-06-19"):
+for date in pd.date_range(start="2022-09-01",end="2023-01-01"):
     try:
         d = date.strftime("%Y/%m/%d")
         print(d)
@@ -43,7 +37,7 @@ for date in pd.date_range(start="2021-09-05",end="2022-06-19"):
         races = soup.find_all('div', attrs={'class': 'f_fs13 margin_top15'})
 
         for race in races:
-            M=N=O=P=Q=R=S=T=0
+            M=N=O=0
 
             divs = race.find_all('div')
 
@@ -58,68 +52,45 @@ for date in pd.date_range(start="2021-09-05",end="2022-06-19"):
             worksheet.write(row, 3, int(tds[1].text))
             worksheet.write(row, 4, tds[2].text)
             worksheet.write(row, 5, tds[3].text)
-            if(int(tds[1].text)<4):
+            if(int(tds[1].text)<5):
                 M+=1
+            elif(int(tds[1].text)<10):
                 N+=1
-            if(int(tds[1].text)<6):
+            elif(int(tds[1].text)>9):
                 O+=1
-                P+=1
-            if(tds[3].text=='潘頓' or tds[3].text=='莫雷拉'):
-                Q+=1
-                R+=1
-                S+=1
-                T+=1
-            if(tds[3].text=='田泰安'):
-                R+=1
-                T+=1
 
             tds = trs[2].find_all('td')
             worksheet.write(row, 6, int(tds[1].text))
             worksheet.write(row, 7, tds[2].text)
             worksheet.write(row, 8, tds[3].text)
-            if(int(tds[1].text)<4):
+            if(int(tds[1].text)<5):
                 M+=1
+            elif(int(tds[1].text)<10):
                 N+=1
-            if(int(tds[1].text)<6):
+            elif(int(tds[1].text)>9):
                 O+=1
-                P+=1
-            if(tds[3].text=='潘頓' or tds[3].text=='莫雷拉'):
-                Q+=1
-                R+=1
-                S+=1
-                T+=1
-            if(tds[3].text=='田泰安'):
-                R+=1
-                Q+=1
 
             tds = trs[3].find_all('td')
             worksheet.write(row, 9, int(tds[1].text))
             worksheet.write(row, 10, tds[2].text)
             worksheet.write(row, 11, tds[3].text)
-            if(int(tds[1].text)<4):
-                M+=1
-            if(int(tds[1].text)<6):
-                O+=1
-            if(tds[3].text=='潘頓' or tds[3].text=='莫雷拉'):
-                Q+=1
-                R+=1
-            if(tds[3].text=='田泰安'):
-                R+=1
-
 
             worksheet.write(row, 12, M)
             worksheet.write(row, 13, N)
             worksheet.write(row, 14, O)
-            worksheet.write(row, 15, P)
-            worksheet.write(row, 16, Q)
-            worksheet.write(row, 17, R)
-            worksheet.write(row, 18, S)
-            worksheet.write(row, 19, T)
 
 
             trs = result[1].find_all('tr')
-            tds = trs[2].find_all('td')
-            worksheet.write(row, 20, float(tds[2].text))
+
+            for i in range(len(trs)):
+                tds = trs[i].find_all('td')
+                if(len(tds)==3):
+                    if tds[0].text == '獨贏':
+                        worksheet.write(row, 15, float(tds[2].text.replace(',', '')))
+
+                    if tds[0].text == '連贏':
+                        worksheet.write(row, 16, float(tds[2].text.replace(',', '')))
+
 
             
             row += 1
