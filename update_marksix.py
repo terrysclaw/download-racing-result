@@ -36,7 +36,7 @@ class Marksix(Base):
     ExtraNum = Column(Integer)
 
 with Session(engine) as session:
-    with open('2022.txt') as f:
+    with open('2023.txt') as f:
         lines = f.readlines()
         for line in lines:
             # print(line)
