@@ -43,7 +43,7 @@ with Session(engine) as session:
             cols = line.split("\t")
 
             marksix = Marksix()
-            # print(cols)
+            print(cols)
             if len(cols)==9:
                 marksix.DrawNo = cols[0][2:4]+'-'+cols[0][4:7]
                 marksix.Date = datetime.strptime(cols[1], "%Y/%m/%d")
@@ -69,6 +69,10 @@ with Session(engine) as session:
 
 
             try:
+                if session.query(Marksix).filter(Marksix.DrawNo == marksix.DrawNo).first():
+                    print(marksix.DrawNo, "existed!")
+                    continue
+                
                 print(marksix.DrawNo, marksix.Date, marksix.DrawnNo1, marksix.DrawnNo2, marksix.DrawnNo3, marksix.DrawnNo4, marksix.DrawnNo5, marksix.DrawnNo6, marksix.ExtraNum)
                 session.add(marksix)
                 session.commit()
