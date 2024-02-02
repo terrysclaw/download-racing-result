@@ -23,7 +23,7 @@ row = 1
 
 driver = webdriver.Chrome("chromedriver.exe")
 
-for date in pd.date_range(start="2023-09-01",end="2024-01-30"):
+for date in pd.date_range(start="2024-01-31",end="2024-02-01"):
     try:
         d = date.strftime("%Y/%m/%d")
         print(d)
