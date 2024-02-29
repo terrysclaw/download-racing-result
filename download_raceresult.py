@@ -46,7 +46,7 @@ row2 = 1
 
 driver = webdriver.Chrome("chromedriver.exe")
 
-for date in pd.date_range(start="2023-09-10", end="2024-02-28"):
+for date in pd.date_range(start="2022-09-11", end="2023-07-16"):
     try:
         d = date.strftime("%Y/%m/%d")
         print(d)
@@ -133,7 +133,7 @@ try:
     sheet3.write('D1', '賽日積分')
     sheet3.write('E1', '開盤賠率')
 
-    driver.get("https://racing.hkjc.com/racing/chinese/racing-info/tnc-odds-chart.aspx?season=2023")
+    driver.get("https://racing.hkjc.com/racing/chinese/racing-info/tnc-odds-chart.aspx?season=2022")
     sleep(5)
 
     content = driver.page_source
@@ -162,7 +162,7 @@ try:
     sheet4.write('D1', '賽日積分')
     sheet4.write('E1', '開盤賠率')
 
-    driver.get("https://racing.hkjc.com/racing/chinese/racing-info/jkc-odds-chart.aspx?season=2023")
+    driver.get("https://racing.hkjc.com/racing/chinese/racing-info/jkc-odds-chart.aspx?season=2022")
     sleep(5)
 
     content = driver.page_source
