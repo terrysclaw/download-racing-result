@@ -9,6 +9,8 @@ import xlsxwriter
 
 
 workbook = xlsxwriter.Workbook('results.xlsx')
+date_format = workbook.add_format({'num_format': 'dd/mm/yyyy'})
+
 worksheet = workbook.add_worksheet()
 worksheet.write('A1', 'Date')
 worksheet.write('B1', 'Race No')
@@ -36,8 +38,13 @@ worksheet.write('S1', 'Qin')
 
 sheet2 = workbook.add_worksheet()
 sheet2.write('A1', 'Date')
-sheet2.write('B1', '騎師王')
-sheet2.write('C1', '練馬師王')
+sheet2.write('B1', '騎師王編號')
+sheet2.write('C1', '騎師')
+
+sheet2.write('D1', '練馬師王編號')
+sheet2.write('E1', '練馬師')
+
+
 
 
 
@@ -48,12 +55,11 @@ driver = webdriver.Chrome("chromedriver.exe")
 
 season="2023"
 start="2024-03-03"
-end="2024-03-03"
+end="2024-03-06"
 
 for date in pd.date_range(start=start, end=end):
     try:
         d = date.strftime("%Y/%m/%d")
-        print(d)
         driver.get("https://racing.hkjc.com/racing/information/Chinese/Racing/ResultsAll.aspx?RaceDate=" + d)
 
         sleep(3)
@@ -66,7 +72,7 @@ for date in pd.date_range(start=start, end=end):
         for race in races:
             divs = race.find_all('div')
 
-            worksheet.write(row, 0, d)
+            worksheet.write_datetime(row, 0, date, date_format)
             worksheet.write(row, 1, divs[0].text.replace('第', '').replace('場', ''))
 
             # race title
@@ -114,17 +120,19 @@ for date in pd.date_range(start=start, end=end):
                         worksheet.write(row, 18, float(tds[2].text.replace(',', '')))
 
                     if '騎師王' in tds[0].text:
-                        sheet2.write(row2, 0, d)
-                        sheet2.write(row2, 1, tds[1].text)
+                        sheet2.write_datetime(row2, 0, date, date_format)
+                        sheet2.write(row2, 1, int(tds[1].text.split(',')[0].split(' ')[0]))
+                        sheet2.write(row2, 2, tds[1].text.split(',')[0].split(' ')[1])
 
                     if '練馬師王' in tds[0].text:
-                        sheet2.write(row2, 2, tds[1].text)
+                        sheet2.write(row2, 3, int(tds[1].text.split(',')[0].split(' ')[0]))
+                        sheet2.write(row2, 4, tds[1].text.split(',')[0].split(' ')[1])
                         row2 += 1
             
             row += 1
 
     except:
-        continue
+        raise
 
 
 
@@ -150,7 +158,7 @@ try:
             continue
 
         tds = trs[i].find_all('td')
-        sheet3.write(i, 0, tds[0].text)
+        sheet3.write_datetime(i, 0, datetime.strptime(tds[0].text, "%d/%m/%Y"), date_format)
         sheet3.write(i, 1, tds[1].text)
         sheet3.write(i, 2, tds[2].text)
         sheet3.write(i, 3, float(tds[3].text))
@@ -179,7 +187,7 @@ try:
             continue
 
         tds = trs[i].find_all('td')
-        sheet4.write(i, 0, tds[0].text)
+        sheet4.write_datetime(i, 0, datetime.strptime(tds[0].text, "%d/%m/%Y"), date_format)
         sheet4.write(i, 1, tds[1].text)
         sheet4.write(i, 2, tds[2].text)
         sheet4.write(i, 3, float(tds[3].text))
