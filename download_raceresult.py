@@ -197,6 +197,98 @@ except:
     pass
 
 
+
+start="2023-09-10"
+end="2024-03-10"
+
+try:
+    #練馬師王 - 詳情
+    sheet5 = workbook.add_worksheet()
+    sheet5.write('A1', '賽事日期')
+    sheet5.write('B1', '編號')
+    sheet5.write('C1', '練馬師')
+    sheet5.write('D1', '賽日積分')
+    sheet5.write('E1', '冠')
+    sheet5.write('F1', '亞')
+    sheet5.write('G1', '季')
+    sheet5.write('H1', '殿')
+
+    #騎師王 - 詳情
+    sheet6 = workbook.add_worksheet()
+    sheet6.write('A1', '賽事日期')
+    sheet6.write('B1', '編號')
+    sheet6.write('C1', '騎師')
+    sheet6.write('D1', '賽日積分')
+    sheet6.write('E1', '冠')
+    sheet6.write('F1', '亞')
+    sheet6.write('G1', '季')
+    sheet6.write('H1', '殿')
+
+
+    row5 = 1
+    row6 = 1
+    for date in pd.date_range(start=start, end=end):
+        d = date.strftime("%Y/%m/%d")
+        driver.get("https://racing.hkjc.com/racing/information/Chinese/TNC/TNCResult.aspx?RaceDate=" + d)
+
+        sleep(3)
+
+        content = driver.page_source
+        soup = BeautifulSoup(content, features="html.parser")
+
+        table = soup.find_all('table', attrs={'class': 'f_tac table_bd'})
+        if len(table) > 0:
+            tbody = table[0].find_all('tbody')
+            trs = tbody[0].find_all('tr')
+            for i in range(len(trs)):
+                tds = trs[i].find_all('td')
+                sheet5.write_datetime(row5, 0, date, date_format)
+                sheet5.write(row5, 1, int(tds[0].text))
+                sheet5.write(row5, 2, tds[1].text)
+                try:
+                    sheet5.write(row5, 3, int(tds[2].text))
+                except:
+                    sheet5.write(row5, 3, 0)
+                sheet5.write(row5, 4, int(tds[3].text.replace('*', '')))
+                sheet5.write(row5, 5, int(tds[4].text.replace('*', '')))
+                sheet5.write(row5, 6, int(tds[5].text.replace('*', '')))
+                sheet5.write(row5, 7, int(tds[6].text.replace('*', '')))
+
+                row5 += 1
+
+
+        driver.get("https://racing.hkjc.com/racing/information/Chinese/JKC/JKCResult.aspx?RaceDate=" + d)
+
+        sleep(3)
+
+        content = driver.page_source
+        soup = BeautifulSoup(content, features="html.parser")
+
+        table = soup.find_all('table', attrs={'class': 'f_tac table_bd'})
+        if len(table) > 0:
+            tbody = table[0].find_all('tbody')
+            trs = tbody[0].find_all('tr')
+            for i in range(len(trs)):
+                tds = trs[i].find_all('td')
+                sheet6.write_datetime(row6, 0, date, date_format)
+                sheet6.write(row6, 1, int(tds[0].text))
+                sheet6.write(row6, 2, tds[1].text)
+                try:
+                    sheet6.write(row6, 3, int(tds[2].text))
+                except:
+                    sheet6.write(row6, 3, 0)
+                sheet6.write(row6, 4, int(tds[3].text.replace('*', '')))
+                sheet6.write(row6, 5, int(tds[4].text.replace('*', '')))
+                sheet6.write(row6, 6, int(tds[5].text.replace('*', '')))
+                sheet6.write(row6, 7, int(tds[6].text.replace('*', '')))
+
+                row6 += 1
+
+   
+
+except:
+    raise
+
 sleep(3)
 driver.quit()
 
