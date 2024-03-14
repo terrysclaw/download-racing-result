@@ -54,8 +54,8 @@ row2 = 1
 driver = webdriver.Chrome("chromedriver.exe")
 
 season="2023"
-start="2024-03-10"
-end="2024-03-10"
+start="2024-03-13"
+end="2024-03-13"
 
 for date in pd.date_range(start=start, end=end):
     try:
@@ -197,9 +197,6 @@ except:
     pass
 
 
-
-start="2023-09-10"
-end="2024-03-10"
 
 try:
     #練馬師王 - 詳情
