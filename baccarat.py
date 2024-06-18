@@ -138,6 +138,20 @@ for _ in range(1000):
 
     
 
+tie_indexes = []
+for result in results:
+    for index_ in result[-2]:
+        tie_indexes.append(index_)
+
+filename = 'tie_index.csv'    
+with open(filename, 'w', newline='') as csvfile:
+    writer = csv.writer(csvfile)
+    writer.writerow(['index'])
+    for index in tie_indexes:
+        writer.writerow([index])
+
+
+
 diffs = []
 for result in results:
     for diff_ in result[-1]:
