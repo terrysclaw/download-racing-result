@@ -104,72 +104,74 @@ def play():
 # print(play())
 
 
-results = []
 
-for _ in range(1000):
-    ## generate new deck
-    CARDS = ['A', '2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K'] * 32
-
-    player_wins = 0
-    banker_wins = 0
-    ties = 0
-    tie_index = []
+for t in range(20):
+    results = []
     
-    for i in range(60):
-        outcome = play()
-        if outcome == 'Player wins':
-            player_wins += 1
-        elif outcome == 'Banker wins':
-            banker_wins += 1
-        else:
-            ties += 1
-            tie_index.append(i)
+    for _ in range(100):
+        ## generate new deck
+        CARDS = ['A', '2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K'] * 32
+
+        player_wins = 0
+        banker_wins = 0
+        ties = 0
+        tie_index = []
+        
+        for i in range(60):
+            outcome = play()
+            if outcome == 'Player wins':
+                player_wins += 1
+            elif outcome == 'Banker wins':
+                banker_wins += 1
+            else:
+                ties += 1
+                tie_index.append(i)
 
 
 
-    print('閒家贏:\t' + str(player_wins))
-    print('莊家贏:\t' + str(banker_wins))
+        print('閒家贏:\t' + str(player_wins))
+        print('莊家贏:\t' + str(banker_wins))
 
-    differences = [tie_index[i+1] - tie_index[i] for i in range(len(tie_index)-1)]
-    print('和局:\t' + str(ties) + '\t\t' + str(tie_index) + '\t\t' + str(differences))
-    print('#' * 100)
+        differences = [tie_index[i+1] - tie_index[i] for i in range(len(tie_index)-1)]
+        print('和局:\t' + str(ties) + '\t\t' + str(tie_index) + '\t\t' + str(differences))
+        print('#' * 100)
 
-    results.append((_+1, player_wins, banker_wins, ties, sum(differences) / len(differences) if len(differences) else 0, max(differences) if len(differences) else 0, min(differences) if len(differences) else 0, tie_index, differences))
+        results.append((_+1, player_wins, banker_wins, ties, sum(differences) / len(differences) if len(differences) else 0, max(differences) if len(differences) else 0, min(differences) if len(differences) else 0, tie_index, differences))
 
-    
+        
 
-tie_indexes = []
-for result in results:
-    for index_ in result[-2]:
-        tie_indexes.append(index_)
-
-filename = 'tie_index.csv'    
-with open(filename, 'w', newline='') as csvfile:
-    writer = csv.writer(csvfile)
-    writer.writerow(['index'])
-    for index in tie_indexes:
-        writer.writerow([index])
-
-
-
-diffs = []
-for result in results:
-    for diff_ in result[-1]:
-        diffs.append(diff_)
-
-filename = 'tie_diff.csv'    
-with open(filename, 'w', newline='') as csvfile:
-    writer = csv.writer(csvfile)
-    writer.writerow(['diff'])
-    for diff in diffs:
-        writer.writerow([diff])
-
-## store the results to a csv file
-
-filename = 'baccarat.csv'
-
-with open(filename, 'w', newline='') as csvfile:
-    writer = csv.writer(csvfile)
-    writer.writerow(['#','Player Wins', 'Banker Wins', 'Ties', 'Avg Diff', 'Max Diff', 'Min Diff', 'Tie Index', 'Differences'])
+    tie_indexes = []
     for result in results:
-        writer.writerow(result)
+        for index_ in result[-2]:
+            tie_indexes.append(index_)
+
+    filename = f'tie_index_{str(t)}.csv'    
+    with open(filename, 'w', newline='') as csvfile:
+        writer = csv.writer(csvfile)
+        writer.writerow(['index'])
+        for index in tie_indexes:
+            writer.writerow([index])
+
+
+
+    diffs = []
+    for result in results:
+        for diff_ in result[-1]:
+            diffs.append(diff_)
+
+    filename = f'tie_diff_{str(t)}.csv'
+    with open(filename, 'w', newline='') as csvfile:
+        writer = csv.writer(csvfile)
+        writer.writerow(['diff'])
+        for diff in diffs:
+            writer.writerow([diff])
+
+    ## store the results to a csv file
+
+    filename = f'baccarat_{str(t)}.csv'
+
+    with open(filename, 'w', newline='') as csvfile:
+        writer = csv.writer(csvfile)
+        writer.writerow(['#','Player Wins', 'Banker Wins', 'Ties', 'Avg Diff', 'Max Diff', 'Min Diff', 'Tie Index', 'Differences'])
+        for result in results:
+            writer.writerow(result)
