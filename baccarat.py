@@ -1,6 +1,9 @@
 # This is a python file to show how the game works
 import random
 import csv
+import os
+import pandas as pd
+
 
 CARDS = ['A', '2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K'] * 32
 OUTCOME = ['Player wins', 'Banker wins', 'Tie']
@@ -105,7 +108,7 @@ def play():
 
 
 
-for t in range(20):
+for t in range(3):
     results = []
     
     for _ in range(100):
@@ -140,38 +143,36 @@ for t in range(20):
 
         
 
-    tie_indexes = []
-    for result in results:
-        for index_ in result[-2]:
-            tie_indexes.append(index_)
+    tie_indexes = [index_ for result in results for index_ in result[-2]]
 
     filename = f'tie_index_{str(t)}.csv'    
     with open(filename, 'w', newline='') as csvfile:
         writer = csv.writer(csvfile)
         writer.writerow(['index'])
-        for index in tie_indexes:
-            writer.writerow([index])
+        writer.writerows([[index] for index in tie_indexes])
 
 
 
-    diffs = []
-    for result in results:
-        for diff_ in result[-1]:
-            diffs.append(diff_)
+    diffs = [diff_ for result in results for diff_ in result[-1]]
 
     filename = f'tie_diff_{str(t)}.csv'
     with open(filename, 'w', newline='') as csvfile:
         writer = csv.writer(csvfile)
         writer.writerow(['diff'])
-        for diff in diffs:
-            writer.writerow([diff])
+        writer.writerows([[diff] for diff in diffs])
 
+    
     ## store the results to a csv file
-
     filename = f'baccarat_{str(t)}.csv'
-
     with open(filename, 'w', newline='') as csvfile:
         writer = csv.writer(csvfile)
-        writer.writerow(['#','Player Wins', 'Banker Wins', 'Ties', 'Avg Diff', 'Max Diff', 'Min Diff', 'Tie Index', 'Differences'])
-        for result in results:
-            writer.writerow(result)
+        headers = ['#', 'Player Wins', 'Banker Wins', 'Ties', 'Avg Diff', 'Max Diff', 'Min Diff', 'Tie Index', 'Differences']
+        writer.writerow(headers)
+        writer.writerows(results)
+
+
+## combine the tie_diff csv files by column
+files = [f for f in os.listdir('.') if 'tie_diff' in f]
+dfs = [pd.read_csv(f) for f in files]
+df = pd.concat(dfs, axis=1)
+df.to_csv('tie_diff.csv', index=False)
