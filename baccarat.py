@@ -135,14 +135,16 @@ for d in range(50):
                     ties += 1
                     tie_log.append(i+1)
 
-            tie_log.append(61)
-            all_tie_log.append([(d+1, h+1, card+1, tie_log[i], tie_log[i] if i == 0 else (tie_log[i] - tie_log[i-1]) if i < len(tie_log) else 0) for i in range(len(tie_log))])
+            # tie_log.append(61)
+            # all_tie_log.append([(d+1, h+1, card+1, tie_log[i], tie_log[i] if i == 0 else (tie_log[i] - tie_log[i-1]) if i < len(tie_log) else 0) for i in range(len(tie_log))])
+            all_tie_log.append([(d+1, h+1, card+1, tie_log[i], None if i == 0 else (tie_log[i] - tie_log[i-1]) if i < len(tie_log) else 0) for i in range(len(tie_log))])
             
 
             print('閒家贏:\t' + str(player_wins))
             print('莊家贏:\t' + str(banker_wins))
 
-            gaps = [tie_log[0]] + [tie_log[i+1] - tie_log[i] for i in range(len(tie_log)-1)]
+            ## calculate the gaps
+            gaps = [tie_log[i] - tie_log[i-1] for i in range(1, len(tie_log))]
             print('和局:\t' + str(ties) + '\t\t' + str(tie_log) + '\t\t' + str(gaps))
             print('#' * 100)
 
@@ -163,7 +165,7 @@ for d in range(50):
 filename = 'all_tie_log.csv'
 with open(filename, 'w', newline='') as csvfile:
     writer = csv.writer(csvfile)
-    headers = ['Day', 'Hour', 'Card', 'Start Index', 'Length']
+    headers = ['Day', 'Hour', 'Card', 'Start Index', 'Gap']
     writer.writerow(headers)
     writer.writerows([row for log in all_tie_log for row in log])          
 
