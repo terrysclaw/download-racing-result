@@ -106,73 +106,76 @@ def play():
 
 # print(play())
 
+monthly_log = []
+all_tie_log = []
 
-
-for t in range(3):
-    results = []
-    
-    for _ in range(100):
-        ## generate new deck
-        CARDS = ['A', '2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K'] * 32
-
-        player_wins = 0
-        banker_wins = 0
-        ties = 0
-        tie_index = []
+for d in range(50):
+    daily_capital = [30000]
+    daily_winloss = []
+    for h in range(8):
+        results = []
         
-        for i in range(60):
-            outcome = play()
-            if outcome == 'Player wins':
-                player_wins += 1
-            elif outcome == 'Banker wins':
-                banker_wins += 1
-            else:
-                ties += 1
-                tie_index.append(i)
+        for card in range(10):
+            ## generate new deck
+            CARDS = ['A', '2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K'] * 32
 
+            player_wins = 0
+            banker_wins = 0
+            ties = 0
+            tie_log = []
+            cards_tie_log = []
+            
+            for i in range(60):
+                outcome = play()
+                if outcome == 'Player wins':
+                    player_wins += 1
+                elif outcome == 'Banker wins':
+                    banker_wins += 1
+                else:
+                    ties += 1
+                    tie_log.append(i+1)
 
+            tie_log.append(61)
+            all_tie_log.append([(d+1, h+1, card+1, tie_log[i], tie_log[i] if i == 0 else (tie_log[i] - tie_log[i-1]) if i < len(tie_log) else 0) for i in range(len(tie_log))])
+            
 
-        print('閒家贏:\t' + str(player_wins))
-        print('莊家贏:\t' + str(banker_wins))
+            print('閒家贏:\t' + str(player_wins))
+            print('莊家贏:\t' + str(banker_wins))
 
-        differences = [tie_index[i+1] - tie_index[i] for i in range(len(tie_index)-1)]
-        print('和局:\t' + str(ties) + '\t\t' + str(tie_index) + '\t\t' + str(differences))
-        print('#' * 100)
+            gaps = [tie_log[0]] + [tie_log[i+1] - tie_log[i] for i in range(len(tie_log)-1)]
+            print('和局:\t' + str(ties) + '\t\t' + str(tie_log) + '\t\t' + str(gaps))
+            print('#' * 100)
 
-        results.append((_+1, player_wins, banker_wins, ties, sum(differences) / len(differences) if len(differences) else 0, max(differences) if len(differences) else 0, min(differences) if len(differences) else 0, tie_index, differences))
+            results.append((d+1, player_wins, banker_wins, ties, sum(gaps) / len(gaps) if len(gaps) else 0, max(gaps) if len(gaps) else 0, min(gaps) if len(gaps) else 0))
 
         
-
-    tie_indexes = [index_ for result in results for index_ in result[-2]]
-
-    filename = f'tie_index_{str(t)}.csv'    
-    with open(filename, 'w', newline='') as csvfile:
-        writer = csv.writer(csvfile)
-        writer.writerow(['index'])
-        writer.writerows([[index] for index in tie_indexes])
-
+        ## store the results to a csv file
+        filename = f'baccarat_{str(d)}_{str(h)}.csv'
+        with open(filename, 'w', newline='') as csvfile:
+            writer = csv.writer(csvfile)
+            headers = ['#', 'Player Wins', 'Banker Wins', 'Ties', 'Avg Diff', 'Max Diff', 'Min Diff']
+            writer.writerow(headers)
+            writer.writerows(results)
 
 
-    diffs = [diff_ for result in results for diff_ in result[-1]]
 
-    filename = f'tie_diff_{str(t)}.csv'
-    with open(filename, 'w', newline='') as csvfile:
-        writer = csv.writer(csvfile)
-        writer.writerow(['diff'])
-        writer.writerows([[diff] for diff in diffs])
-
-    
-    ## store the results to a csv file
-    filename = f'baccarat_{str(t)}.csv'
-    with open(filename, 'w', newline='') as csvfile:
-        writer = csv.writer(csvfile)
-        headers = ['#', 'Player Wins', 'Banker Wins', 'Ties', 'Avg Diff', 'Max Diff', 'Min Diff', 'Tie Index', 'Differences']
-        writer.writerow(headers)
-        writer.writerows(results)
+## store all tie logs to a csv file
+filename = 'all_tie_log.csv'
+with open(filename, 'w', newline='') as csvfile:
+    writer = csv.writer(csvfile)
+    headers = ['Day', 'Hour', 'Card', 'Start Index', 'Length']
+    writer.writerow(headers)
+    writer.writerows([row for log in all_tie_log for row in log])          
 
 
-## combine the tie_diff csv files by column
-files = [f for f in os.listdir('.') if 'tie_diff' in f]
-dfs = [pd.read_csv(f) for f in files]
-df = pd.concat(dfs, axis=1)
-df.to_csv('tie_diff.csv', index=False)
+#     monthly_log.append((d+1, daily_capital[-1], daily_capital[-1]-30000, min(daily_capital), max(daily_capital), daily_winloss.count(1), daily_winloss.count(-1), daily_capital, daily_winloss))
+
+
+# print(monthly_log)
+
+# filename = 'monthly_log.csv'
+# with open(filename, 'w', newline='') as csvfile:
+#     writer = csv.writer(csvfile)
+#     headers = ['Month', 'Final Capital', 'Net Profit', 'Min Capital', 'Max Capital', 'Win Count', 'Loss Count', 'Daily Capital', 'Daily Win/Loss']
+#     writer.writerow(headers)
+#     writer.writerows(monthly_log)
