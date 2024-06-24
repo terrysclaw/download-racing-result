@@ -106,16 +106,16 @@ def play():
 
 # print(play())
 
-monthly_log = []
+results = []
 all_tie_log = []
+betting_log = []
 
-for d in range(50):
+for d in range(20):
     daily_capital = [30000]
     daily_winloss = []
-    for h in range(8):
-        results = []
+    for h in range(4):
         
-        for card in range(10):
+        for card in range(16):
             ## generate new deck
             CARDS = ['A', '2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K'] * 32
 
@@ -135,8 +135,6 @@ for d in range(50):
                     ties += 1
                     tie_log.append(i+1)
 
-            # tie_log.append(61)
-            # all_tie_log.append([(d+1, h+1, card+1, tie_log[i], tie_log[i] if i == 0 else (tie_log[i] - tie_log[i-1]) if i < len(tie_log) else 0) for i in range(len(tie_log))])
             all_tie_log.append([(d+1, h+1, card+1, tie_log[i], None if i == 0 else (tie_log[i] - tie_log[i-1]) if i < len(tie_log) else 0) for i in range(len(tie_log))])
             
 
@@ -151,13 +149,13 @@ for d in range(50):
             results.append((d+1, player_wins, banker_wins, ties, sum(gaps) / len(gaps) if len(gaps) else 0, max(gaps) if len(gaps) else 0, min(gaps) if len(gaps) else 0))
 
         
-        ## store the results to a csv file
-        filename = f'baccarat_{str(d)}_{str(h)}.csv'
-        with open(filename, 'w', newline='') as csvfile:
-            writer = csv.writer(csvfile)
-            headers = ['#', 'Player Wins', 'Banker Wins', 'Ties', 'Avg Diff', 'Max Diff', 'Min Diff']
-            writer.writerow(headers)
-            writer.writerows(results)
+## store the results to a csv file
+filename = f'baccarat.csv'
+with open(filename, 'w', newline='') as csvfile:
+    writer = csv.writer(csvfile)
+    headers = ['#', 'Player Wins', 'Banker Wins', 'Ties', 'Avg Gap', 'Max Gap', 'Min Gap']
+    writer.writerow(headers)
+    writer.writerows(results)
 
 
 
