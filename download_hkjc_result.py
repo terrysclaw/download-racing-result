@@ -4,10 +4,10 @@ import xlsxwriter
 from datetime import date, timedelta
 
 
-
+year = 2024
 # export result to excel
 # Create a new Excel file
-workbook = xlsxwriter.Workbook('raceresult.xlsx')
+workbook = xlsxwriter.Workbook(f'raceresult_{year}.xlsx')
 
 # Add a worksheet
 worksheet = workbook.add_worksheet()
@@ -18,7 +18,7 @@ bold = workbook.add_format({'bold': True})
 # Write the header row
 worksheet.write('A1', '日期', bold)
 worksheet.write('B1', '總場次', bold)
-worksheet.write('CB1', '馬場', bold)
+worksheet.write('C1', '馬場', bold)
 worksheet.write('D1', '場次', bold)
 worksheet.write('E1', '班次', bold)
 worksheet.write('F1', '路程', bold)
@@ -50,7 +50,7 @@ col = 0
 
 
 ## create date range from 2023/09/01 to 2024/07/14
-date_from = date(2024, 10, 1)
+date_from = date(2024, 9, 1)
 date_to = date(2024, 10, 1)
 
 
@@ -155,11 +155,11 @@ for date in [date_from + timedelta(days=x) for x in range((date_to-date_from).da
                     cells = tr.find_all('td')
                     
                     worksheet.write(row, col, race_date)
-                    worksheet.write(row, col + 1, race_index)
+                    worksheet.write(row, col + 1, f"{year}{race_index.zfill(3)}")
                     worksheet.write(row, col + 2, race_course)
-                    worksheet.write(row, col + 3, race_no)
+                    worksheet.write(row, col + 3, int(race_no))
                     worksheet.write(row, col + 4, race_class)
-                    worksheet.write(row, col + 5, distance)
+                    worksheet.write(row, col + 5, int(distance))
                     worksheet.write(row, col + 6, cup)
                     worksheet.write(row, col + 7, band)
                     worksheet.write(row, col + 8, time_1)
@@ -167,24 +167,58 @@ for date in [date_from + timedelta(days=x) for x in range((date_to-date_from).da
                     worksheet.write(row, col + 10, time_3)
                     worksheet.write(row, col + 11, time_4)
                     worksheet.write(row, col + 12, time_5)
-                    worksheet.write(row, col + 13, time_6)
-                    worksheet.write(row, col + 14, cells[0].text.replace('\r', '').replace('\n', ''))
-                    worksheet.write(row, col + 15, cells[1].text.replace('\r', '').replace('\n', ''))
+                    worksheet.write(row, col + 13, time_6)               
+                    
+                    position = cells[0].text.replace('\r', '').replace('\n', '')
+                    try:     
+                        worksheet.write(row, col + 14, int(position))
+                    except:
+                        worksheet.write(row, col + 14, None)
+                    
+                    horse_no = cells[1].text.replace('\r', '').replace('\n', '')
+                    try:
+                        worksheet.write(row, col + 15, int(horse_no))
+                    except:
+                        worksheet.write(row, col + 15, None)
+
                     worksheet.write(row, col + 16, cells[2].text.replace('\xa0', '').split('(')[0])
                     worksheet.write(row, col + 17, cells[2].text.replace('\xa0', '').split('(')[1].replace(')', ''))
                     worksheet.write(row, col + 18, cells[3].text.replace('\r', '').replace('\n', ''))
                     worksheet.write(row, col + 19, cells[4].text.replace('\r', '').replace('\n', ''))
-                    worksheet.write(row, col + 20, cells[5].text.replace('\r', '').replace('\n', ''))
-                    worksheet.write(row, col + 21, cells[6].text.replace('\r', '').replace('\n', ''))
-                    worksheet.write(row, col + 22, cells[7].text.replace('\r', '').replace('\n', ''))
+                    
+                    
+                    actual_weight = cells[5].text.replace('\r', '').replace('\n', '')
+                    try:
+                        worksheet.write(row, col + 20, int(actual_weight))
+                    except:
+                        worksheet.write(row, col + 20, None)
+                    
+
+                    horse_weight = cells[6].text.replace('\r', '').replace('\n', '')
+                    try:
+                        worksheet.write(row, col + 21, int(horse_weight))
+                    except:
+                        worksheet.write(row, col + 21, None)
+                    
+                    draw_no = cells[7].text.replace('\r', '').replace('\n', '')
+                    try:
+                        worksheet.write(row, col + 22, int(draw_no))
+                    except:
+                        worksheet.write(row, col + 22, None)
+                    
                     worksheet.write(row, col + 23, cells[8].text.replace('\r', '').replace('\n', ''))
                     worksheet.write(row, col + 24, cells[9].text.replace('\r', '').replace('\n', ''))
                     worksheet.write(row, col + 25, cells[10].text.replace('\r', '').replace('\n', ''))
-                    worksheet.write(row, col + 26, cells[11].text.replace('\r', '').replace('\n', ''))
+                    
+                    odds = cells[11].text.replace('\r', '').replace('\n', '')
+                    try:
+                        worksheet.write(row, col + 26, float(odds))
+                    except:
+                        worksheet.write(row, col + 26, None)
                     row += 1
 
 
-            except:
+            except:            
                 pass
 
 
