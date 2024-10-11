@@ -51,7 +51,7 @@ col = 0
 
 ## create date range from 2023/09/01 to 2024/07/14
 date_from = date(2024, 9, 1)
-date_to = date(2024, 10, 1)
+date_to = date(2024, 10, 9)
 
 
 # Loop through each date
