@@ -22,7 +22,7 @@ cursor = cnx.cursor()
 # driver = webdriver.Chrome("chromedriver.exe")
 driver = webdriver.Chrome()
 
-driver.get("http://win.on.cc/ftpdata/marksix/2023.txt")
+driver.get("http://win.on.cc/ftpdata/marksix/2024.txt")
 
 sleep(3)
 

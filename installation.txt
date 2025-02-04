@@ -1,4 +1,4 @@
 py -3 -m venv .venv
 
-pip install pandas selenium bs4 xlsxwriter
+pip install pandas selenium bs4 xlsxwriter openpyxl
 pip install mysql-connector-python

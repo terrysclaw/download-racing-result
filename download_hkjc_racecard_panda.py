@@ -18,11 +18,10 @@ for race_no in range(1, 12):
         '日期': [],
         '馬場': [],
         '場次': [],
-        # '班次': [],
-        # '路程': [],
-        # '賽事名稱': [],
-        # '泥草': [],
-        # '賽道': [],
+        '泥草': [],
+        '賽道': [],
+        '班次': [],
+        '路程': [],
         '馬匹編號': [],
         '6次近績': [],
         '馬名': [],
@@ -65,8 +64,24 @@ for race_no in range(1, 12):
         # Parse the HTML using BeautifulSoup
         soup = BeautifulSoup(response.text, 'html.parser')
 
+        # <div class="f_fs13" style="line-height: 20px;"><span class="font_wb" />第 1 場 - 鴻圖讓賽</span><br>2025年2月5日, 星期三, 跑馬地, 18:40<br>草地, "A" 賽道, 1650米, 好地<br>獎金: $875,000, 評分: 40-0, 第五班</div>
 
         race_div = soup.find('div', class_='f_fs13')
+
+        print(race_div.text)
+
+        band = None
+        race_class = None
+        distance = None
+
+        for col in race_div.text.split(','):
+            if '賽道' in col:
+                band = col
+            if '班' in col:
+                race_class = col
+            if '米' in col:
+                distance = int(col.split('米')[0])
+
         
 
         # Find the table containing the race results
@@ -82,17 +97,10 @@ for race_no in range(1, 12):
             data['日期'].append(race_date)
             data['馬場'].append(race_course)
             data['場次'].append(int(race_no))
-
-            # data['班次'].append(race_class)
-            # data['路程'].append(int(distance))
-            # data['賽事名稱'].append(cup)
-            # if '草地' in band:
-            #     data['泥草'].append('草地')
-            #     data['賽道'].append(band.split('草地')[1])
-            # else:
-            #     data['泥草'].append('泥地')
-            #     data['賽道'].append(None)
-            
+            data['泥草'].append('草地' if band else '泥地')
+            data['賽道'].append(band)
+            data['班次'].append(race_class)
+            data['路程'].append(distance)
 
             try:
                 data['馬匹編號'].append(int(cells[0].text))
@@ -233,16 +241,41 @@ for race_no in range(1, 12):
     for index, row in df.iterrows():
         # get last match 馬名
         # last_match = df_results[(df_results['馬名'] == row['馬名']) & (df_results['總場次'] < row['總場次'])].tail(1)
-        last_match = df_results[(df_results['布號'] == row['烙號'])].tail(1)
+        last_match = df_results[(df_results['布號'] == row['烙號']) & (df_results['馬場'] == row['馬場']) & (df_results['泥草'] == row['泥草']) & (df_results['路程'] == row['路程'])].tail(1)
 
         if not last_match.empty:
+            df.loc[index, '上次總場次'] = last_match['總場次'].values[0]
             df.loc[index, '上次名次'] = last_match['名次'].values[0]
-            df.loc[index, '上次騎師'] = last_match['騎師'].values[0]
-            df.loc[index, '上次獨贏賠率'] = last_match['獨贏賠率'].values[0]
+            df.loc[index, '賽事時間1'] = last_match['賽事時間1'].values[0]
+            df.loc[index, '賽事時間2'] = last_match['賽事時間2'].values[0]
+            df.loc[index, '賽事時間3'] = last_match['賽事時間3'].values[0]
+            df.loc[index, '賽事時間4'] = last_match['賽事時間4'].values[0]
+            df.loc[index, '賽事時間5'] = last_match['賽事時間5'].values[0]
+            df.loc[index, '賽事時間6'] = last_match['賽事時間6'].values[0]
+            df.loc[index, '完成時間'] = last_match['完成時間'].values[0]
+            df.loc[index, '第 1 段'] = last_match['第 1 段'].values[0]
+            df.loc[index, '第 2 段'] = last_match['第 2 段'].values[0]
+            df.loc[index, '第 3 段'] = last_match['第 3 段'].values[0]
+            df.loc[index, '第 4 段'] = last_match['第 4 段'].values[0]
+            df.loc[index, '第 5 段'] = last_match['第 5 段'].values[0]
+            df.loc[index, '第 6 段'] = last_match['第 6 段'].values[0]
+
         else:
+            df.loc[index, '上次總場次'] = None
             df.loc[index, '上次名次'] = None
-            df.loc[index, '上次騎師'] = None
-            df.loc[index, '上次獨贏賠率'] = None
+            df.loc[index, '賽事時間1'] = None
+            df.loc[index, '賽事時間2'] = None
+            df.loc[index, '賽事時間3'] = None
+            df.loc[index, '賽事時間4'] = None
+            df.loc[index, '賽事時間5'] = None
+            df.loc[index, '賽事時間6'] = None
+            df.loc[index, '完成時間'] = None
+            df.loc[index, '第 1 段'] = None
+            df.loc[index, '第 2 段'] = None
+            df.loc[index, '第 3 段'] = None
+            df.loc[index, '第 4 段'] = None
+            df.loc[index, '第 5 段'] = None
+            df.loc[index, '第 6 段'] = None
 
 
     ## export to excel file 
