@@ -407,7 +407,6 @@ for date in dates_2023 if year == 2023 else dates_2024:
 
             for row in rows:
                 code = row[2].split('(')[1].replace(')', '')
-                print(code)
                 
                 # find the index of the horse in data['布號'] match the code
                 for index, item in enumerate(data['布號']):

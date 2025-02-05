@@ -2,6 +2,7 @@ import requests
 from bs4 import BeautifulSoup
 import pandas as pd
 from datetime import date
+import numpy as np
 
 
 # store the original df
@@ -246,6 +247,17 @@ for race_no in range(1, 12):
         if not last_match.empty:
             df.loc[index, '上次總場次'] = last_match['總場次'].values[0]
             df.loc[index, '上次名次'] = last_match['名次'].values[0]
+            df.loc[index, '上次負磅'] = last_match['實際負磅'].values[0]
+            ## calculate 
+            if not np.isnan(last_match['實際負磅'].values[0]):
+                df.loc[index, '負磅 +/-'] = row['負磅'] - last_match['實際負磅'].values[0]
+
+            df.loc[index, '上次檔位'] = last_match['檔位'].values[0]
+            ## calculate 
+            if not np.isnan(last_match['檔位'].values[0]):
+                df.loc[index, '檔位 +/-'] = row['檔位'] - last_match['檔位'].values[0]
+
+
             df.loc[index, '賽事時間1'] = last_match['賽事時間1'].values[0]
             df.loc[index, '賽事時間2'] = last_match['賽事時間2'].values[0]
             df.loc[index, '賽事時間3'] = last_match['賽事時間3'].values[0]
@@ -259,10 +271,53 @@ for race_no in range(1, 12):
             df.loc[index, '第 4 段'] = last_match['第 4 段'].values[0]
             df.loc[index, '第 5 段'] = last_match['第 5 段'].values[0]
             df.loc[index, '第 6 段'] = last_match['第 6 段'].values[0]
+            df.loc[index, '最後 800'] = None
+
+            ## calculate the last 800 and round to 2 decimal places
+            if not np.isnan(last_match['第 6 段'].values[0]):
+                df.loc[index, '最後 800'] = round(last_match['第 5 段'].values[0] + last_match['第 6 段'].values[0], 2)
+            elif not np.isnan(last_match['第 5 段'].values[0]):
+                df.loc[index, '最後 800'] = round(last_match['第 4 段'].values[0] + last_match['第 5 段'].values[0], 2)
+            elif not np.isnan(last_match['第 4 段'].values[0]):
+                df.loc[index, '最後 800'] = round(last_match['第 3 段'].values[0] + last_match['第 4 段'].values[0], 2)
+            elif not np.isnan(last_match['第 3 段'].values[0]):
+                df.loc[index, '最後 800'] = round(last_match['第 2 段'].values[0] + last_match['第 3 段'].values[0], 2)
+
+            factor = 0
+            if not np.isnan(df.loc[index, '負磅 +/-']):
+                factor = df.loc[index, '負磅 +/-'] * 0.015
+
+            if not np.isnan(df.loc[index, '檔位 +/-']):
+                if df.loc[index, '路程'] == 1000:
+                    factor += df.loc[index, '檔位 +/-'] * 0.014
+                elif df.loc[index, '路程'] == 1200:
+                    factor += df.loc[index, '檔位 +/-'] * 0.014
+                elif df.loc[index, '路程'] == 1650:
+                    factor += df.loc[index, '檔位 +/-'] * 0.023
+                elif df.loc[index, '路程'] == 1800:
+                    factor += df.loc[index, '檔位 +/-'] * 0.066
+                elif df.loc[index, '路程'] == 2200:
+                    factor += df.loc[index, '檔位 +/-'] * -0.079
+                
+            df.loc[index, '調整基數'] = factor
+
+            df.loc[index, '調整後最後 800'] = df.loc[index, '最後 800'] + factor
+
+            ## convert 1:41.75 to 101.75
+            second = int(df.loc[index, '完成時間'].split(':')[0]) * 60 + float(df.loc[index, '完成時間'].split(':')[1])
+            second += factor
+
+            ## convert 101.75 to 1:41.75
+            df.loc[index, '調整後完成時間'] = f"{int(second / 60)}:{round(second % 60, 2)}"
+
 
         else:
             df.loc[index, '上次總場次'] = None
             df.loc[index, '上次名次'] = None
+            df.loc[index, '上次負磅'] = None
+            df.loc[index, '負磅 +/-'] = None
+            df.loc[index, '上次檔位'] = None
+            df.loc[index, '檔位 +/-'] = None
             df.loc[index, '賽事時間1'] = None
             df.loc[index, '賽事時間2'] = None
             df.loc[index, '賽事時間3'] = None
@@ -276,6 +331,10 @@ for race_no in range(1, 12):
             df.loc[index, '第 4 段'] = None
             df.loc[index, '第 5 段'] = None
             df.loc[index, '第 6 段'] = None
+            df.loc[index, '最後 800'] = None
+            df.loc[index, '調整基數'] = None
+            df.loc[index, '調整後最後 800'] = None
+            df.loc[index, '調整後完成時間'] = None
 
 
     ## export to excel file 
