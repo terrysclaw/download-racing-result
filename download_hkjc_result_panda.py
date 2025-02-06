@@ -158,6 +158,7 @@ dates_2024 = [
     {'date': date(2025, 1, 22), 'course': 'HV'},
     {'date': date(2025, 1, 26), 'course': 'ST'},
     {'date': date(2025, 1, 31), 'course': 'ST'},
+    {'date': date(2025, 2, 5), 'course': 'HV'},
 ]
 
 
