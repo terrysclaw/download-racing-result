@@ -15,7 +15,7 @@ df_results = pd.concat([df_2023, df_2024], ignore_index=True)
 
 
 # 下載最新排位表
-race_date = date(2025, 2, 12)
+race_date = date(2025, 2, 16)
 race_course = "ST"  # ST / HV
 
 # URL to scrape HKJC racing results
@@ -252,15 +252,21 @@ for race_no in range(1, 12):
         if not last_match.empty:
             df.loc[index, '上次總場次'] = last_match['總場次'].values[0]
             df.loc[index, '上次名次'] = last_match['名次'].values[0]
+            df.loc[index, '上次騎師'] = last_match['騎師'].values[0]
+            df.loc[index, '上次賠率'] = last_match['獨贏賠率'].values[0]
             df.loc[index, '上次負磅'] = last_match['實際負磅'].values[0]
             ## calculate 
             if not np.isnan(last_match['實際負磅'].values[0]):
                 df.loc[index, '上次負磅 +/-'] = row['負磅'] - last_match['實際負磅'].values[0]
+            else:
+                df.loc[index, '上次負磅 +/-'] = None
 
             df.loc[index, '上次檔位'] = last_match['檔位'].values[0]
             ## calculate 
             if not np.isnan(last_match['檔位'].values[0]):
                 df.loc[index, '上次檔位 +/-'] = row['檔位'] - last_match['檔位'].values[0]
+            else:
+                df.loc[index, '上次檔位 +/-'] = None
 
 
             df.loc[index, '上次賽事時間1'] = last_match['賽事時間1'].values[0]
@@ -348,6 +354,8 @@ for race_no in range(1, 12):
         else:
             df.loc[index, '上次總場次'] = None
             df.loc[index, '上次名次'] = None
+            df.loc[index, '上次騎師'] = None
+            df.loc[index, '上次賠率'] = None
             df.loc[index, '上次負磅'] = None
             df.loc[index, '上次負磅 +/-'] = None
             df.loc[index, '上次檔位'] = None
@@ -374,19 +382,25 @@ for race_no in range(1, 12):
         # get 前一次 match 馬名
         last_match = df_results[(df_results['布號'] == row['烙號']) & (df_results['馬場'] == row['馬場']) & (df_results['泥草'] == row['泥草']) & (df_results['路程'] == row['路程'])].tail(2).head(1)
 
-        if not last_match.empty:
+        if not last_match.empty and last_match['總場次'].values[0] != df.loc[index, '上次總場次']:
             df.loc[index, '前次總場次'] = last_match['總場次'].values[0]
             df.loc[index, '前次名次'] = last_match['名次'].values[0]
+            df.loc[index, '前次騎師'] = last_match['騎師'].values[0]
+            df.loc[index, '前次賠率'] = last_match['獨贏賠率'].values[0]
             df.loc[index, '前次負磅'] = last_match['實際負磅'].values[0]
 
             ## calculate 
             if not np.isnan(last_match['實際負磅'].values[0]):
                 df.loc[index, '前次負磅 +/-'] = row['負磅'] - last_match['實際負磅'].values[0]
+            else:
+                df.loc[index, '前次負磅 +/-'] = None
 
             df.loc[index, '前次檔位'] = last_match['檔位'].values[0]
             ## calculate 
             if not np.isnan(last_match['檔位'].values[0]):
                 df.loc[index, '前次檔位 +/-'] = row['檔位'] - last_match['檔位'].values[0]
+            else:
+                df.loc[index, '前次檔位 +/-'] = None
 
 
             df.loc[index, '前次賽事時間1'] = last_match['賽事時間1'].values[0]
@@ -474,6 +488,8 @@ for race_no in range(1, 12):
         else:
             df.loc[index, '前次總場次'] = None
             df.loc[index, '前次名次'] = None
+            df.loc[index, '前次騎師'] = None
+            df.loc[index, '前次賠率'] = None
             df.loc[index, '前次負磅'] = None
             df.loc[index, '前次負磅 +/-'] = None
             df.loc[index, '前次檔位'] = None
@@ -498,7 +514,16 @@ for race_no in range(1, 12):
 
         df.loc[index, '馬名2'] = df.loc[index, '馬名']
         df.loc[index, '上次調整後完成時間2'] = df.loc[index, '上次調整後完成時間']
+        if df.loc[index, '上次總場次'] is not None and not np.isnan(df.loc[index, '上次名次']) and not np.isnan(df.loc[index, '上次賠率']):
+            df.loc[index, '上次賽事'] = f"{df.loc[index, '上次騎師']}({int(df.loc[index, '上次名次'])}){df.loc[index, '上次賠率']}"
+        else:
+            df.loc[index, '上次賽事'] = None
+        
         df.loc[index, '前次調整後完成時間2'] = df.loc[index, '前次調整後完成時間']
+        if df.loc[index, '前次總場次'] is not None and not np.isnan(df.loc[index, '前次名次']) and not np.isnan(df.loc[index, '前次賠率']):
+            df.loc[index, '前次賽事'] = f"{df.loc[index, '前次騎師']}({int(df.loc[index, '前次名次'])}){df.loc[index, '前次賠率']}"
+        else:
+            df.loc[index, '前次賽事'] = None
 
         second = 0
         if df.loc[index, '上次總場次'] is not None:
@@ -520,6 +545,33 @@ for race_no in range(1, 12):
         else:
             df.loc[index, '2次調整後完成時間'] = None
 
+        ##
+        second = 0
+        if df.loc[index, '上次總場次'] is not None:
+            try:
+                second = int(df.loc[index, '上次調整後完成時間'].split(':')[0]) * 60 + float(df.loc[index, '上次調整後完成時間'].split(':')[1])
+            except:
+                pass
+
+        if second > 0:
+            df.loc[index, '上次調整後完成秒速'] = second
+        else:
+            df.loc[index, '上次調整後完成秒速'] = None
+
+        
+        second = 0
+        if df.loc[index, '2次調整後完成時間'] is not None:
+            try:
+                second = int(df.loc[index, '2次調整後完成時間'].split(':')[0]) * 60 + float(df.loc[index, '2次調整後完成時間'].split(':')[1])
+            except:
+                pass
+
+        if second > 0:
+            df.loc[index, '2次調整後完成秒速'] = second
+        else:
+            df.loc[index, '2次調整後完成秒速'] = None
+        
+
 
     ## export to excel file 
     df.to_excel(f"Racecard_{race_date.strftime('%Y%m%d')}_{race_no}.xlsx", index=False)
@@ -530,13 +582,13 @@ output_file = f"Racecard_{race_date.strftime('%Y%m%d')}.xlsx"  # 替换为输出
 
 # 创建一个 ExcelWriter 对象，用于写入多个工作表
 with pd.ExcelWriter(output_file, engine='openpyxl') as writer:
-    df = pd.read_excel("raceresult_2023.xlsx")
+    # df = pd.read_excel("raceresult_2023.xlsx")
 
-    df.to_excel(writer, sheet_name="result_2023", index=False)
+    # df.to_excel(writer, sheet_name="result_2023", index=False)
 
-    df = pd.read_excel("raceresult_2024.xlsx")
+    # df = pd.read_excel("raceresult_2024.xlsx")
 
-    df.to_excel(writer, sheet_name="result_2024", index=False)
+    # df.to_excel(writer, sheet_name="result_2024", index=False)
 
 
     for race_no in range(1, 12):
