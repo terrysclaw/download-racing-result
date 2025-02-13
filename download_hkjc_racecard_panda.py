@@ -251,6 +251,8 @@ for race_no in range(1, 12):
 
         if not last_match.empty:
             df.loc[index, '上次總場次'] = last_match['總場次'].values[0]
+            df.loc[index, '上次日期'] = last_match['日期'].values[0]
+            df.loc[index, '上次班次'] = last_match['班次'].values[0]
             df.loc[index, '上次名次'] = last_match['名次'].values[0]
             df.loc[index, '上次騎師'] = last_match['騎師'].values[0]
             df.loc[index, '上次賠率'] = last_match['獨贏賠率'].values[0]
@@ -353,6 +355,8 @@ for race_no in range(1, 12):
 
         else:
             df.loc[index, '上次總場次'] = None
+            df.loc[index, '上次日期'] = None
+            df.loc[index, '上次班次'] = None
             df.loc[index, '上次名次'] = None
             df.loc[index, '上次騎師'] = None
             df.loc[index, '上次賠率'] = None
