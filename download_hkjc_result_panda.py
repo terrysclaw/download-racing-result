@@ -18,7 +18,7 @@ service = Service(chrome_driver_path)
 driver = webdriver.Chrome(service=service)
 
 
-year = 2024
+year = 2023
 
 df = pd.DataFrame({})
 
@@ -182,6 +182,7 @@ for date in dates_2023 if year == 2023 else dates_2024:
             '場次': [],
             '班次': [],
             '路程': [],
+            '場地狀況': [],
             '賽事名稱': [],
             '泥草': [],
             '賽道': [],
@@ -241,6 +242,7 @@ for date in dates_2023 if year == 2023 else dates_2024:
                 distance = distance_parts[1].split('米')[0].strip()
             else:
                 distance = ''
+
 
             # Safely extract rating
             rating_parts = distance_parts[1].split('(') if len(distance_parts) > 1 else []
@@ -308,6 +310,7 @@ for date in dates_2023 if year == 2023 else dates_2024:
                 data['場次'].append(int(race_no))
                 data['班次'].append(race_class)
                 data['路程'].append(int(distance))
+                data['場地狀況'].append(condition)
                 data['賽事名稱'].append(cup)
                 if '草地' in band:
                     data['泥草'].append('草地')
