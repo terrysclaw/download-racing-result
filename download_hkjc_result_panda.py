@@ -18,7 +18,7 @@ service = Service(chrome_driver_path)
 driver = webdriver.Chrome(service=service)
 
 
-year = 2023
+year = 2024
 
 df = pd.DataFrame({})
 
@@ -162,6 +162,7 @@ dates_2024 = [
     {'date': date(2025, 2, 9), 'course': 'ST'},
     {'date': date(2025, 2, 12), 'course': 'ST'},
     {'date': date(2025, 2, 16), 'course': 'ST'},
+    {'date': date(2025, 2, 19), 'course': 'HV'},
 ]
 
 
