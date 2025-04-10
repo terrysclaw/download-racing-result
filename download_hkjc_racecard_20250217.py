@@ -660,7 +660,6 @@ for race_no in range(1, 12):
 
         ## calculate 2次較快完成秒速 min(上次調整後完成秒速, 前次調整後完成秒速)
         df.loc[index, '2次較快完成秒速'] = min(df.loc[index, '上次調整後完成秒速'], df.loc[index, '前次調整後完成秒速'])        
-        
 
 
     ## export to excel file 
