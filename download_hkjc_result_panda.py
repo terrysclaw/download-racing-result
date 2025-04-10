@@ -163,6 +163,20 @@ dates_2024 = [
     {'date': date(2025, 2, 12), 'course': 'ST'},
     {'date': date(2025, 2, 16), 'course': 'ST'},
     {'date': date(2025, 2, 19), 'course': 'HV'},
+    {'date': date(2025, 2, 23), 'course': 'ST'},
+    {'date': date(2025, 2, 26), 'course': 'HV'},
+    {'date': date(2025, 3, 2), 'course': 'ST'},
+    {'date': date(2025, 3, 5), 'course': 'HV'},
+    {'date': date(2025, 3, 9), 'course': 'ST'},
+    {'date': date(2025, 3, 12), 'course': 'HV'},
+    {'date': date(2025, 3, 15), 'course': 'ST'},
+    {'date': date(2025, 3, 19), 'course': 'HV'},
+    {'date': date(2025, 3, 23), 'course': 'ST'},
+    {'date': date(2025, 3, 26), 'course': 'ST'},
+    {'date': date(2025, 3, 31), 'course': 'ST'},
+    {'date': date(2025, 4, 3), 'course': 'HV'},
+    {'date': date(2025, 4, 6), 'course': 'ST'},
+    {'date': date(2025, 4, 9), 'course': 'HV'},
 ]
 
 

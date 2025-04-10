@@ -15,8 +15,8 @@ df_results = pd.concat([df_2023, df_2024], ignore_index=True)
 
 
 # 下載最新排位表
-race_date = date(2025, 2, 19)
-race_course = "HV"  # ST / HV
+race_date = date(2025, 4, 13)
+race_course = "ST"  # ST / HV
 
 # URL to scrape HKJC racing results
 for race_no in range(1, 12):
@@ -307,7 +307,7 @@ for race_no in range(1, 12):
         
 
         # 找上次同程紀錄
-        last_match = df_results[(df_results['布號'] == row['烙號']) & (df_results['馬場'] == row['馬場']) & (df_results['泥草'] == row['泥草']) & (df_results['路程'] == row['路程'])].tail(1)
+        last_match = df_results[(df_results['布號'] == row['烙號']) & (df_results['馬場'] == row['馬場']) & (df_results['泥草'] == row['泥草']) & (df_results['路程'] == row['路程']) & (df_results['獨贏賠率'] > 0)].tail(1)
 
         ## 如果沒有同程紀錄, 找相近路程紀錄 distance >= row['路程'] +- 250
         if last_match.empty:
@@ -475,7 +475,7 @@ for race_no in range(1, 12):
 
 
             # 如果已經有上次同程紀錄，則找前次同程紀錄
-            last_match = df_results[(df_results['布號'] == row['烙號']) & (df_results['馬場'] == row['馬場']) & (df_results['泥草'] == row['泥草']) & (df_results['路程'] == row['路程'])].tail(2).head(1)
+            last_match = df_results[(df_results['布號'] == row['烙號']) & (df_results['馬場'] == row['馬場']) & (df_results['泥草'] == row['泥草']) & (df_results['路程'] == row['路程']) & (df_results['獨贏賠率'] > 0)].tail(2).head(1)
 
             if not last_match.empty and last_match['總場次'].values[0] != df.loc[index, '上次總場次']:
                 df.loc[index, '前次總場次'] = last_match['總場次'].values[0]
@@ -634,6 +634,19 @@ for race_no in range(1, 12):
 
         
         second = 0
+        if df.loc[index, '前次總場次'] is not None:
+            try:
+                second = int(df.loc[index, '前次調整後完成時間'].split(':')[0]) * 60 + float(df.loc[index, '前次調整後完成時間'].split(':')[1])
+            except:
+                pass
+
+        if second > 0:
+            df.loc[index, '前次調整後完成秒速'] = second
+        else:
+            df.loc[index, '前次調整後完成秒速'] = None
+
+
+        second = 0
         if df.loc[index, '2次調整後平均時間'] is not None:
             try:
                 second = int(df.loc[index, '2次調整後平均時間'].split(':')[0]) * 60 + float(df.loc[index, '2次調整後平均時間'].split(':')[1])
@@ -644,6 +657,9 @@ for race_no in range(1, 12):
             df.loc[index, '2次調整後平均秒速'] = second
         else:
             df.loc[index, '2次調整後平均秒速'] = None
+
+        ## calculate 2次較快完成秒速 min(上次調整後完成秒速, 前次調整後完成秒速)
+        df.loc[index, '2次較快完成秒速'] = min(df.loc[index, '上次調整後完成秒速'], df.loc[index, '前次調整後完成秒速'])        
         
 
 

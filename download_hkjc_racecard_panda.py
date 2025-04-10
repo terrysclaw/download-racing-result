@@ -564,6 +564,19 @@ for race_no in range(1, 12):
 
         
         second = 0
+        if df.loc[index, '前次總場次'] is not None:
+            try:
+                second = int(df.loc[index, '前次調整後完成時間'].split(':')[0]) * 60 + float(df.loc[index, '前次調整後完成時間'].split(':')[1])
+            except:
+                pass
+
+        if second > 0:
+            df.loc[index, '前次調整後完成秒速'] = second
+        else:
+            df.loc[index, '前次調整後完成秒速'] = None
+
+
+        second = 0
         if df.loc[index, '2次調整後完成時間'] is not None:
             try:
                 second = int(df.loc[index, '2次調整後完成時間'].split(':')[0]) * 60 + float(df.loc[index, '2次調整後完成時間'].split(':')[1])
@@ -574,6 +587,10 @@ for race_no in range(1, 12):
             df.loc[index, '2次調整後完成秒速'] = second
         else:
             df.loc[index, '2次調整後完成秒速'] = None
+
+        
+        ## calculate 2次較快完成秒速 min(上次調整後完成秒速, 前次調整後完成秒速)
+        df.loc[index, '2次較快完成秒速'] = min(df.loc[index, '上次調整後完成秒速'], df.loc[index, '前次調整後完成秒速'])        
         
 
 
