@@ -15,7 +15,7 @@ df_results = pd.concat([df_2023, df_2024], ignore_index=True)
 
 
 # 下載最新排位表
-race_date = date(2025, 4, 13)
+race_date = date(2025, 4, 20)
 race_course = "ST"  # ST / HV
 
 # URL to scrape HKJC racing results
@@ -67,7 +67,6 @@ for race_no in range(1, 12):
     response = requests.get(url)
 
     try:
-
         # Parse the HTML using BeautifulSoup
         soup = BeautifulSoup(response.text, 'html.parser')
 
@@ -75,172 +74,173 @@ for race_no in range(1, 12):
 
         race_div = soup.find('div', class_='f_fs13')
 
-        print(race_div.text)
+        if(race_div):
 
-        band = None
-        race_class = None
-        distance = None
+            band = None
+            race_class = None
+            distance = None
 
-        for col in race_div.text.split(','):
-            if '賽道' in col:
-                band = col
-            if '班' in col:
-                race_class = col
-            if '米' in col:
-                distance = int(col.split('米')[0])
-
-        
-
-        # Find the table containing the race results
-        racecard_table = soup.find('table', id='racecardlist')
-
-
-        # Loop through each row in the table
-        for tr in racecard_table.find_all('tbody')[0].find_all('tr')[2:]:
+            for col in race_div.text.split(','):
+                if '賽道' in col:
+                    band = col
+                if '班' in col:
+                    race_class = col
+                if '米' in col:
+                    try:
+                        distance = int(col.split('米')[0])
+                    except:
+                        distance = None
+                        
             
-            # Get data from each cell
-            cells = tr.find_all('td')
+            # Find the table containing the race results
+            racecard_table = soup.find('table', id='racecardlist')
 
-            data['日期'].append(race_date)
-            data['馬場'].append(race_course)
-            data['場次'].append(int(race_no))
-            data['泥草'].append('草地' if band else '泥地')
-            data['賽道'].append(band)
-            data['班次'].append(race_class)
-            data['路程'].append(distance)
+            # Loop through each row in the table
+            for tr in racecard_table.find_all('tbody')[0].find_all('tr')[2:]:
+                
+                # Get data from each cell
+                cells = tr.find_all('td')
 
-            try:
-                data['馬匹編號'].append(int(cells[0].text))
-            except:
-                data['馬匹編號'].append(None)
+                data['日期'].append(race_date)
+                data['馬場'].append(race_course)
+                data['場次'].append(int(race_no))
+                data['泥草'].append('草地' if band else '泥地')
+                data['賽道'].append(band)
+                data['班次'].append(race_class)
+                data['路程'].append(distance)
 
-            try:
-                data['6次近績'].append(cells[1].text)
-            except:
-                data['6次近績'].append(None)
+                try:
+                    data['馬匹編號'].append(int(cells[0].text))
+                except:
+                    data['馬匹編號'].append(None)
 
-            try:
-                data['馬名'].append(cells[3].text)
-            except:
-                data['馬名'].append(None)
+                try:
+                    data['6次近績'].append(cells[1].text)
+                except:
+                    data['6次近績'].append(None)
 
-            try:
-                data['烙號'].append(cells[4].text)
-            except:
-                data['烙號'].append(None)
+                try:
+                    data['馬名'].append(cells[3].text)
+                except:
+                    data['馬名'].append(None)
 
-            try:
-                data['負磅'].append(int(cells[5].text))
-            except:
-                data['負磅'].append(None)
+                try:
+                    data['烙號'].append(cells[4].text)
+                except:
+                    data['烙號'].append(None)
 
-            try:
-                data['騎師'].append(cells[6].text)
-            except:
-                data['騎師'].append(None)
+                try:
+                    data['負磅'].append(int(cells[5].text))
+                except:
+                    data['負磅'].append(None)
 
-            try:
-                data['可能超磅'].append(cells[7].text)
-            except:
-                data['可能超磅'].append(None)
+                try:
+                    data['騎師'].append(cells[6].text)
+                except:
+                    data['騎師'].append(None)
 
-            try:
-                data['檔位'].append(int(cells[8].text))
-            except:
-                data['檔位'].append(None)
+                try:
+                    data['可能超磅'].append(cells[7].text)
+                except:
+                    data['可能超磅'].append(None)
 
-            try:
-                data['練馬師'].append(cells[9].text)
-            except:
-                data['練馬師'].append(None)
+                try:
+                    data['檔位'].append(int(cells[8].text))
+                except:
+                    data['檔位'].append(None)
 
-            try:
-                data['國際評分'].append(int(cells[10].text))
-            except:
-                data['國際評分'].append(None)
+                try:
+                    data['練馬師'].append(cells[9].text)
+                except:
+                    data['練馬師'].append(None)
 
-            try:
-                data['評分'].append(int(cells[11].text))
-            except:
-                data['評分'].append(None)
+                try:
+                    data['國際評分'].append(int(cells[10].text))
+                except:
+                    data['國際評分'].append(None)
 
-            try:
-                data['評分+/-'].append(cells[12].text)
-            except:
-                data['評分+/-'].append(None)
+                try:
+                    data['評分'].append(int(cells[11].text))
+                except:
+                    data['評分'].append(None)
 
-            try:
-                data['排位體重'].append(int(cells[13].text))
-            except:
-                data['排位體重'].append(None)
+                try:
+                    data['評分+/-'].append(cells[12].text)
+                except:
+                    data['評分+/-'].append(None)
 
-            try:
-                data['排位體重+/-'].append(cells[14].text)
-            except:
-                data['排位體重+/-'].append(None)
+                try:
+                    data['排位體重'].append(int(cells[13].text))
+                except:
+                    data['排位體重'].append(None)
 
-            try:
-                data['最佳時間'].append(cells[15].text)
-            except:
-                data['最佳時間'].append(None)
+                try:
+                    data['排位體重+/-'].append(cells[14].text)
+                except:
+                    data['排位體重+/-'].append(None)
 
-            try:
-                data['馬齡'].append(int(cells[16].text))
-            except:
-                data['馬齡'].append(None)
+                try:
+                    data['最佳時間'].append(cells[15].text)
+                except:
+                    data['最佳時間'].append(None)
 
-            try:
-                data['分齡讓磅'].append(int(cells[17].text))
-            except:
-                data['分齡讓磅'].append(None)
+                try:
+                    data['馬齡'].append(int(cells[16].text))
+                except:
+                    data['馬齡'].append(None)
 
-            try:
-                data['性別'].append(cells[18].text)
-            except:
-                data['性別'].append(None)
+                try:
+                    data['分齡讓磅'].append(int(cells[17].text))
+                except:
+                    data['分齡讓磅'].append(None)
 
-            try:
-                data['今季獎金'].append(cells[19].text)
-            except:
-                data['今季獎金'].append(None)
+                try:
+                    data['性別'].append(cells[18].text)
+                except:
+                    data['性別'].append(None)
 
-            try:
-                data['優先參賽次序'].append(cells[20].text)
-            except:
-                data['優先參賽次序'].append(None)
+                try:
+                    data['今季獎金'].append(cells[19].text)
+                except:
+                    data['今季獎金'].append(None)
 
-            try:
-                data['上賽距今日數'].append(cells[21].text)
-            except:
-                data['上賽距今日數'].append(None)
+                try:
+                    data['優先參賽次序'].append(cells[20].text)
+                except:
+                    data['優先參賽次序'].append(None)
 
-            try:
-                data['配備'].append(cells[22].text)
-            except:
-                data['配備'].append(None)
+                try:
+                    data['上賽距今日數'].append(cells[21].text)
+                except:
+                    data['上賽距今日數'].append(None)
 
-            try:
-                data['馬主'].append(cells[23].text)
-            except:
-                data['馬主'].append(None)
+                try:
+                    data['配備'].append(cells[22].text)
+                except:
+                    data['配備'].append(None)
 
-            try:
-                data['父系'].append(cells[24].text)
-            except:
-                data['父系'].append(None)
+                try:
+                    data['馬主'].append(cells[23].text)
+                except:
+                    data['馬主'].append(None)
 
-            try:
-                data['母系'].append(cells[25].text)
-            except:
-                data['母系'].append(None)
+                try:
+                    data['父系'].append(cells[24].text)
+                except:
+                    data['父系'].append(None)
 
-            try:
-                data['進口類別'].append(cells[26].text)
-            except:
-                data['進口類別'].append(None)
+                try:
+                    data['母系'].append(cells[25].text)
+                except:
+                    data['母系'].append(None)
+
+                try:
+                    data['進口類別'].append(cells[26].text)
+                except:
+                    data['進口類別'].append(None)
             
     except:            
-        pass
+        raise
 
     df = pd.DataFrame(data)
 
@@ -311,7 +311,10 @@ for race_no in range(1, 12):
 
         ## 如果沒有同程紀錄, 找相近路程紀錄 distance >= row['路程'] +- 250
         if last_match.empty:
-            last_match = df_results[(df_results['馬名'] == row['馬名']) & (df_results['馬場'] == row['馬場']) & (df_results['泥草'] == row['泥草']) & ( (df_results['路程'] >= row['路程'] - 250) | (df_results['路程'] <= row['路程'] + 250) )].tail(1)
+            last_match = df_results[(df_results['馬名'] == row['馬名']) & (df_results['馬場'] == row['馬場']) & (df_results['泥草'] == row['泥草']) & (df_results['路程'] == int(row['路程']) - 200) & (df_results['獨贏賠率'] > 0)].tail(1)
+        
+            if last_match.empty:
+                last_match = df_results[(df_results['馬名'] == row['馬名']) & (df_results['馬場'] == row['馬場']) & (df_results['泥草'] == row['泥草']) & (df_results['路程'] == int(row['路程']) + 200) & (df_results['獨贏賠率'] > 0)].tail(1)
 
         if not last_match.empty:
             df.loc[index, '上次總場次'] = last_match['總場次'].values[0]
