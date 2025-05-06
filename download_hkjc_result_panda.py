@@ -173,12 +173,17 @@ dates_2024 = [
     {'date': date(2025, 3, 19), 'course': 'HV'},
     {'date': date(2025, 3, 23), 'course': 'ST'},
     {'date': date(2025, 3, 26), 'course': 'ST'},
-    {'date': date(2025, 3, 31), 'course': 'ST'},
-    {'date': date(2025, 4, 3), 'course': 'HV'},
+    {'date': date(2025, 3, 30), 'course': 'ST'},
+    {'date': date(2025, 4, 2), 'course': 'HV'},
     {'date': date(2025, 4, 6), 'course': 'ST'},
     {'date': date(2025, 4, 9), 'course': 'HV'},
     {'date': date(2025, 4, 13), 'course': 'ST'},
     {'date': date(2025, 4, 16), 'course': 'HV'},
+    {'date': date(2025, 4, 20), 'course': 'ST'},
+    {'date': date(2025, 4, 23), 'course': 'HV'},
+    {'date': date(2025, 4, 27), 'course': 'ST'},
+    {'date': date(2025, 4, 30), 'course': 'HV'},
+    {'date': date(2025, 5, 4), 'course': 'ST'},
 ]
 
 
@@ -401,68 +406,68 @@ for date in dates_2023 if year == 2023 else dates_2024:
             pass
 
 
-        # get sectional time
-        url = f"https://racing.hkjc.com/racing/information/Chinese/Racing/DisplaySectionalTime.aspx?RaceDate={date['date'].strftime('%d/%m/%Y')}&RaceNo={race_no}"
-        driver.get(url)
+        # # get sectional time
+        # url = f"https://racing.hkjc.com/racing/information/Chinese/Racing/DisplaySectionalTime.aspx?RaceDate={date['date'].strftime('%d/%m/%Y')}&RaceNo={race_no}"
+        # driver.get(url)
 
-        # 等待页面加载完成（根据需要调整等待时间）
-        time.sleep(3)  # 可以替换为更智能的等待方式，如 WebDriverWait
+        # # 等待页面加载完成（根据需要调整等待时间）
+        # time.sleep(3)  # 可以替换为更智能的等待方式，如 WebDriverWait
 
-        # 获取页面内容
-        page_source = driver.page_source
+        # # 获取页面内容
+        # page_source = driver.page_source
 
-        # # 关闭浏览器
-        # driver.quit()
+        # # # 关闭浏览器
+        # # driver.quit()
 
-        # 使用 BeautifulSoup 解析页面内容
-        soup = BeautifulSoup(page_source, 'html.parser')
+        # # 使用 BeautifulSoup 解析页面内容
+        # soup = BeautifulSoup(page_source, 'html.parser')
 
-        # 查找目标表格
-        race_table = soup.find('table', class_='table_bd')
+        # # 查找目标表格
+        # race_table = soup.find('table', class_='table_bd')
 
-        if race_table:
-            # 提取表头
-            headers = [th.text.strip() for th in race_table.find('thead').find_all('td')]
+        # if race_table:
+        #     # 提取表头
+        #     headers = [th.text.strip() for th in race_table.find('thead').find_all('td')]
 
-            # 提取表格数据
-            rows = []
-            for row in race_table.find('tbody').find_all('tr'):
-                cells = [cell.text.strip() for cell in row.find_all('td')]
-                rows.append(cells)
+        #     # 提取表格数据
+        #     rows = []
+        #     for row in race_table.find('tbody').find_all('tr'):
+        #         cells = [cell.text.strip() for cell in row.find_all('td')]
+        #         rows.append(cells)
 
-            for row in rows:
-                code = row[2].split('(')[1].replace(')', '')
+        #     for row in rows:
+        #         code = row[2].split('(')[1].replace(')', '')
                 
-                # find the index of the horse in data['布號'] match the code
-                for index, item in enumerate(data['布號']):
-                    if item == code:
-                        try:
-                            data['第 1 段'][index] = row[3].split('\n')[1].replace('\n', '')
-                        except:
-                            pass
-                        try:
-                            data['第 2 段'][index] = row[4].split('\n')[1].replace('\n', '')
-                        except:
-                            pass
-                        try:
-                            data['第 3 段'][index] = row[5].split('\n')[1].replace('\n', '')
-                        except:
-                            pass
-                        try:                        
-                            data['第 4 段'][index] = row[6].split('\n')[1].replace('\n', '')
-                        except:
-                            pass
-                        try:
-                            data['第 5 段'][index] = row[7].split('\n')[1].replace('\n', '')
-                        except:
-                            pass
-                        try:
-                            data['第 6 段'][index] = row[8].split('\n')[1].replace('\n', '')
-                        except:
-                            pass
+        #         # find the index of the horse in data['布號'] match the code
+        #         for index, item in enumerate(data['布號']):
+        #             if item == code:
+        #                 try:
+        #                     data['第 1 段'][index] = row[3].split('\n')[1].replace('\n', '')
+        #                 except:
+        #                     pass
+        #                 try:
+        #                     data['第 2 段'][index] = row[4].split('\n')[1].replace('\n', '')
+        #                 except:
+        #                     pass
+        #                 try:
+        #                     data['第 3 段'][index] = row[5].split('\n')[1].replace('\n', '')
+        #                 except:
+        #                     pass
+        #                 try:                        
+        #                     data['第 4 段'][index] = row[6].split('\n')[1].replace('\n', '')
+        #                 except:
+        #                     pass
+        #                 try:
+        #                     data['第 5 段'][index] = row[7].split('\n')[1].replace('\n', '')
+        #                 except:
+        #                     pass
+        #                 try:
+        #                     data['第 6 段'][index] = row[8].split('\n')[1].replace('\n', '')
+        #                 except:
+        #                     pass
 
-        else:
-            print("未找到目标表格。")
+        # else:
+        #     print("未找到目标表格。")
 
 
         ## append data to df

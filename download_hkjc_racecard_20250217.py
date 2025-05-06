@@ -15,8 +15,8 @@ df_results = pd.concat([df_2023, df_2024], ignore_index=True)
 
 
 # 下載最新排位表
-race_date = date(2025, 4, 20)
-race_course = "ST"  # ST / HV
+race_date = date(2025, 5, 7)
+race_course = "HV"  # ST / HV
 
 # URL to scrape HKJC racing results
 for race_no in range(1, 12):
@@ -313,8 +313,15 @@ for race_no in range(1, 12):
         if last_match.empty:
             last_match = df_results[(df_results['馬名'] == row['馬名']) & (df_results['馬場'] == row['馬場']) & (df_results['泥草'] == row['泥草']) & (df_results['路程'] == int(row['路程']) - 200) & (df_results['獨贏賠率'] > 0)].tail(1)
         
-            if last_match.empty:
-                last_match = df_results[(df_results['馬名'] == row['馬名']) & (df_results['馬場'] == row['馬場']) & (df_results['泥草'] == row['泥草']) & (df_results['路程'] == int(row['路程']) + 200) & (df_results['獨贏賠率'] > 0)].tail(1)
+        if last_match.empty:
+            last_match = df_results[(df_results['馬名'] == row['馬名']) & (df_results['馬場'] == row['馬場']) & (df_results['泥草'] == row['泥草']) & (df_results['路程'] == int(row['路程']) + 200) & (df_results['獨贏賠率'] > 0)].tail(1)
+
+        if last_match.empty:
+            last_match = df_results[(df_results['馬名'] == row['馬名']) & (df_results['馬場'] == row['馬場']) & (df_results['泥草'] == row['泥草']) & (df_results['路程'] == int(row['路程']) - 150) & (df_results['獨贏賠率'] > 0)].tail(1)
+        
+        if last_match.empty:
+            last_match = df_results[(df_results['馬名'] == row['馬名']) & (df_results['馬場'] == row['馬場']) & (df_results['泥草'] == row['泥草']) & (df_results['路程'] == int(row['路程']) + 150) & (df_results['獨贏賠率'] > 0)].tail(1)
+
 
         if not last_match.empty:
             df.loc[index, '上次總場次'] = last_match['總場次'].values[0]
