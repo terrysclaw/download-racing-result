@@ -15,8 +15,8 @@ df_results = pd.concat([df_2023, df_2024], ignore_index=True)
 
 
 # 下載最新排位表
-race_date = date(2025, 5, 7)
-race_course = "HV"  # ST / HV
+race_date = date(2025, 5, 10)
+race_course = "ST"  # ST / HV
 
 # URL to scrape HKJC racing results
 for race_no in range(1, 12):
