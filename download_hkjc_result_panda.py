@@ -11,11 +11,11 @@ import time
 
 
 # 设置 ChromeDriver 路径
-chrome_driver_path = "chromedriver.exe"  # 替换为您的 ChromeDriver 路径
+# chrome_driver_path = "chromedriver.exe"  # 替换为您的 ChromeDriver 路径
 
 # 初始化 WebDriver
-service = Service(chrome_driver_path)
-driver = webdriver.Chrome(service=service)
+# service = Service(chrome_driver_path)
+# driver = webdriver.Chrome(service=service)
 
 
 year = 2024
@@ -185,6 +185,11 @@ dates_2024 = [
     {'date': date(2025, 4, 30), 'course': 'HV'},
     {'date': date(2025, 5, 4), 'course': 'ST'},
     {'date': date(2025, 5, 7), 'course': 'HV'},
+    {'date': date(2025, 5, 10), 'course': 'ST'},
+    {'date': date(2025, 5, 14), 'course': 'HV'},
+    {'date': date(2025, 5, 18), 'course': 'ST'},
+    {'date': date(2025, 5, 21), 'course': 'HV'},
+    {'date': date(2025, 5, 25), 'course': 'ST'},
 ]
 
 
@@ -472,11 +477,11 @@ for date in dates_2023 if year == 2023 else dates_2024:
 
 
         ## append data to df
-        df = df.append(pd.DataFrame(data), ignore_index=True)
+        df = df._append(pd.DataFrame(data), ignore_index=True)
 
 
 # 关闭浏览器
-driver.quit()
+# driver.quit()
 
 
 # loop through each row

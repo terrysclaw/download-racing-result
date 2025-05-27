@@ -15,8 +15,8 @@ df_results = pd.concat([df_2023, df_2024], ignore_index=True)
 
 
 # 下載最新排位表
-race_date = date(2025, 5, 10)
-race_course = "ST"  # ST / HV
+race_date = date(2025, 5, 28)
+race_course = "HV"  # ST / HV
 
 # URL to scrape HKJC racing results
 for race_no in range(1, 12):
@@ -414,7 +414,10 @@ for race_no in range(1, 12):
                 
             df.loc[index, '上次調整基數'] = factor
 
-            df.loc[index, '上次調整後最後 800'] = df.loc[index, '上次最後 800'] + factor
+            if df.loc[index, '上次最後 800'] is not None:
+                df.loc[index, '上次調整後最後 800'] = df.loc[index, '上次最後 800'] + factor
+            else:
+                df.loc[index, '上次調整後最後 800'] = None
 
             ## convert 完成時間 to seconds
             if df.loc[index, '上次完成時間'] is None or df.loc[index, '上次完成時間'] == '---':
@@ -579,7 +582,10 @@ for race_no in range(1, 12):
                     
                 df.loc[index, '前次調整基數'] = factor
 
-                df.loc[index, '前次調整後最後 800'] = df.loc[index, '前次最後 800'] + factor
+                if df.loc[index, '前次最後 800'] is not None:
+                    df.loc[index, '前次調整後最後 800'] = df.loc[index, '前次最後 800'] + factor
+                else:
+                    df.loc[index, '前次調整後最後 800'] = None
 
                 ## convert 完成時間 to seconds
                 if df.loc[index, '前次完成時間'] is None or df.loc[index, '前次完成時間'] == '---':
@@ -669,7 +675,8 @@ for race_no in range(1, 12):
             df.loc[index, '2次調整後平均秒速'] = None
 
         ## calculate 2次較快完成秒速 min(上次調整後完成秒速, 前次調整後完成秒速)
-        df.loc[index, '2次較快完成秒速'] = min(df.loc[index, '上次調整後完成秒速'], df.loc[index, '前次調整後完成秒速'])        
+        valid_times = [time for time in [df.loc[index, '上次調整後完成秒速'], df.loc[index, '前次調整後完成秒速']] if time is not None]
+        df.loc[index, '2次較快完成秒速'] = min(valid_times) if valid_times else None        
 
 
     ## export to excel file 
