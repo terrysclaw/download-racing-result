@@ -6,17 +6,16 @@ import numpy as np
 
 
 # store the original df
-df_2023 = pd.read_excel('raceresult_2023.xlsx')
-
 df_2024 = pd.read_excel('raceresult_2024.xlsx')
+df_2025 = pd.read_excel('raceresult_2025.xlsx')
 
 ## concat the two df
-df_results = pd.concat([df_2023, df_2024], ignore_index=True)
+df_results = pd.concat([df_2024, df_2025], ignore_index=True)
 
 
 # 下載最新排位表
-race_date = date(2025, 5, 28)
-race_course = "HV"  # ST / HV
+race_date = date(2025, 10, 1)
+race_course = "ST"  # ST / HV
 
 # URL to scrape HKJC racing results
 for race_no in range(1, 12):
@@ -251,6 +250,7 @@ for race_no in range(1, 12):
         df.loc[index, '上次日期'] = None
         df.loc[index, '上次班次'] = None
         df.loc[index, '上次路程'] = None
+        df.loc[index, '上次場地狀況'] = None
         df.loc[index, '上次名次'] = None
         df.loc[index, '上次騎師'] = None
         df.loc[index, '上次賠率'] = None
@@ -280,6 +280,7 @@ for race_no in range(1, 12):
         df.loc[index, '前次日期'] = None
         df.loc[index, '前次班次'] = None
         df.loc[index, '前次路程'] = None
+        df.loc[index, '前次場地狀況'] = None
         df.loc[index, '前次名次'] = None
         df.loc[index, '前次騎師'] = None
         df.loc[index, '前次賠率'] = None
@@ -328,6 +329,7 @@ for race_no in range(1, 12):
             df.loc[index, '上次日期'] = last_match['日期'].values[0]
             df.loc[index, '上次班次'] = last_match['班次'].values[0]
             df.loc[index, '上次路程'] = last_match['路程'].values[0]
+            df.loc[index, '上次場地狀況'] = last_match['場地狀況'].values[0]
             df.loc[index, '上次名次'] = last_match['名次'].values[0]
             df.loc[index, '上次騎師'] = last_match['騎師'].values[0]
             df.loc[index, '上次賠率'] = last_match['獨贏賠率'].values[0]
@@ -495,6 +497,7 @@ for race_no in range(1, 12):
                 df.loc[index, '前次日期'] = last_match['日期'].values[0]
                 df.loc[index, '前次班次'] = last_match['班次'].values[0]
                 df.loc[index, '前次路程'] = last_match['路程'].values[0]
+                df.loc[index, '前次場地狀況'] = last_match['場地狀況'].values[0]
                 df.loc[index, '前次名次'] = last_match['名次'].values[0]
                 df.loc[index, '前次騎師'] = last_match['騎師'].values[0]
                 df.loc[index, '前次賠率'] = last_match['獨贏賠率'].values[0]
@@ -681,6 +684,7 @@ for race_no in range(1, 12):
 
     ## export to excel file 
     df.to_excel(f"Racecard_{race_date.strftime('%Y%m%d')}_{race_no}.xlsx", index=False)
+    print(df.tail(10))
 
 
 
@@ -693,3 +697,30 @@ with pd.ExcelWriter(output_file, engine='openpyxl') as writer:
 
         # 将 DataFrame 写入 Excel 文件中的新工作表
         df.to_excel(writer, sheet_name=f"Race_{race_no}", index=False)
+
+
+## Alfred AI
+output_file = f"Racecard_{race_date.strftime('%Y%m%d')}_Alfred.xlsx"  # 替换为输出的 Excel 文件路径
+
+with pd.ExcelWriter(output_file, engine='openpyxl') as writer:
+    for race_no in range(1, 12):
+        df = pd.read_excel(f"Racecard_{race_date.strftime('%Y%m%d')}_{race_no}.xlsx")
+
+        try:
+            df_alfred = df[['場次', '班次', '路程', '馬匹編號', '馬名', '騎師', '評分', '上次日期', '上次班次', '上次場地狀況', '負磅', '上次負磅', '上次負磅 +/-', '檔位', '上次檔位', '上次檔位 +/-', '最佳時間', '上次完成時間', '上次最後 800']]
+
+            ## 在'上次日期'後面插入一列'上賽距今日數'
+            df_alfred.insert(df_alfred.columns.get_loc('上次日期') + 1, '上賽距今日數', None)
+
+            race_date_ts = pd.Timestamp(race_date)
+            for index, row in df_alfred.iterrows():
+                if row['上次日期'] is not None and not pd.isna(row['上次日期']):
+                    last_date = pd.to_datetime(row['上次日期'])
+                    df_alfred.at[index, '上賽距今日數'] = (race_date_ts - last_date).days
+
+            print(df_alfred.tail(10))
+
+            df_alfred.to_excel(writer, sheet_name=f"Alfred_{race_no}", index=False)
+        except Exception as e:
+            # print(f"Error processing Alfred sheet for {race_date} Race {race_no}: {e}")
+            pass

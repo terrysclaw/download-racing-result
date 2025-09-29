@@ -7,18 +7,20 @@ from datetime import date, timedelta
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.chrome.service import Service
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
 import time
 
 
 # 设置 ChromeDriver 路径
-# chrome_driver_path = "chromedriver.exe"  # 替换为您的 ChromeDriver 路径
+chrome_driver_path = "chromedriver.exe"  # 替换为您的 ChromeDriver 路径
 
 # 初始化 WebDriver
-# service = Service(chrome_driver_path)
-# driver = webdriver.Chrome(service=service)
+service = Service(chrome_driver_path)
+driver = webdriver.Chrome(service=service)
 
 
-year = 2024
+year = 2025
 
 df = pd.DataFrame({})
 
@@ -190,12 +192,33 @@ dates_2024 = [
     {'date': date(2025, 5, 18), 'course': 'ST'},
     {'date': date(2025, 5, 21), 'course': 'HV'},
     {'date': date(2025, 5, 25), 'course': 'ST'},
+    {'date': date(2025, 5, 28), 'course': 'HV'},
+    {'date': date(2025, 5, 31), 'course': 'ST'},
+    {'date': date(2025, 6, 4), 'course': 'HV'},
+    {'date': date(2025, 6, 8), 'course': 'ST'},
+    {'date': date(2025, 6, 11), 'course': 'HV'},
+    {'date': date(2025, 6, 14), 'course': 'ST'},
+    {'date': date(2025, 6, 22), 'course': 'ST'},
+    {'date': date(2025, 6, 25), 'course': 'HV'},
+    {'date': date(2025, 6, 28), 'course': 'ST'},
+    {'date': date(2025, 7, 1), 'course': 'ST'},
+    {'date': date(2025, 7, 5), 'course': 'ST'},
+    {'date': date(2025, 7, 9), 'course': 'HV'},
+    {'date': date(2025, 7, 13), 'course': 'ST'},
+    {'date': date(2025, 7, 16), 'course': 'HV'},
 ]
 
-
+dates_2025 = [
+    {'date': date(2025, 9, 7), 'course': 'ST'},
+    {'date': date(2025, 9, 10), 'course': 'HV'},
+    {'date': date(2025, 9, 14), 'course': 'ST'},
+    {'date': date(2025, 9, 17), 'course': 'HV'},
+    {'date': date(2025, 9, 21), 'course': 'ST'},
+    {'date': date(2025, 9, 28), 'course': 'ST'},
+]
 
 # Loop through each date
-for date in dates_2023 if year == 2023 else dates_2024:
+for date in dates_2024 if year == 2024 else dates_2025:
     # Convert date
     race_date = date['date'].strftime('%Y/%m/%d')
 
@@ -413,67 +436,72 @@ for date in dates_2023 if year == 2023 else dates_2024:
 
 
         # # get sectional time
-        # url = f"https://racing.hkjc.com/racing/information/Chinese/Racing/DisplaySectionalTime.aspx?RaceDate={date['date'].strftime('%d/%m/%Y')}&RaceNo={race_no}"
-        # driver.get(url)
+        url = f"https://racing.hkjc.com/racing/information/Chinese/Racing/DisplaySectionalTime.aspx?RaceDate={date['date'].strftime('%d/%m/%Y')}&RaceNo={race_no}"
+        driver.get(url)
 
         # # 等待页面加载完成（根据需要调整等待时间）
         # time.sleep(3)  # 可以替换为更智能的等待方式，如 WebDriverWait
+        try:
+            WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.CLASS_NAME, "search")))
+        except Exception as e:
+            print(f"Sectional time table not found for {race_date} Race {race_no}: {e}")
+            continue
 
         # # 获取页面内容
-        # page_source = driver.page_source
+        page_source = driver.page_source
 
         # # # 关闭浏览器
-        # # driver.quit()
+        # driver.quit()
 
         # # 使用 BeautifulSoup 解析页面内容
-        # soup = BeautifulSoup(page_source, 'html.parser')
+        soup = BeautifulSoup(page_source, 'html.parser')
 
         # # 查找目标表格
-        # race_table = soup.find('table', class_='table_bd')
+        race_table = soup.find('table', class_='table_bd')
 
-        # if race_table:
-        #     # 提取表头
-        #     headers = [th.text.strip() for th in race_table.find('thead').find_all('td')]
+        if race_table:
+            # 提取表头
+            headers = [th.text.strip() for th in race_table.find('thead').find_all('td')]
 
-        #     # 提取表格数据
-        #     rows = []
-        #     for row in race_table.find('tbody').find_all('tr'):
-        #         cells = [cell.text.strip() for cell in row.find_all('td')]
-        #         rows.append(cells)
+            # 提取表格数据
+            rows = []
+            for row in race_table.find('tbody').find_all('tr'):
+                cells = [cell.text.strip() for cell in row.find_all('td')]
+                rows.append(cells)
 
-        #     for row in rows:
-        #         code = row[2].split('(')[1].replace(')', '')
+            for row in rows:
+                code = row[2].split('(')[1].replace(')', '')
                 
-        #         # find the index of the horse in data['布號'] match the code
-        #         for index, item in enumerate(data['布號']):
-        #             if item == code:
-        #                 try:
-        #                     data['第 1 段'][index] = row[3].split('\n')[1].replace('\n', '')
-        #                 except:
-        #                     pass
-        #                 try:
-        #                     data['第 2 段'][index] = row[4].split('\n')[1].replace('\n', '')
-        #                 except:
-        #                     pass
-        #                 try:
-        #                     data['第 3 段'][index] = row[5].split('\n')[1].replace('\n', '')
-        #                 except:
-        #                     pass
-        #                 try:                        
-        #                     data['第 4 段'][index] = row[6].split('\n')[1].replace('\n', '')
-        #                 except:
-        #                     pass
-        #                 try:
-        #                     data['第 5 段'][index] = row[7].split('\n')[1].replace('\n', '')
-        #                 except:
-        #                     pass
-        #                 try:
-        #                     data['第 6 段'][index] = row[8].split('\n')[1].replace('\n', '')
-        #                 except:
-        #                     pass
+                # find the index of the horse in data['布號'] match the code
+                for index, item in enumerate(data['布號']):
+                    if item == code:
+                        try:
+                            data['第 1 段'][index] = row[3].split('\n')[1].replace('\n', '')
+                        except:
+                            pass
+                        try:
+                            data['第 2 段'][index] = row[4].split('\n')[1].replace('\n', '')
+                        except:
+                            pass
+                        try:
+                            data['第 3 段'][index] = row[5].split('\n')[1].replace('\n', '')
+                        except:
+                            pass
+                        try:                        
+                            data['第 4 段'][index] = row[6].split('\n')[1].replace('\n', '')
+                        except:
+                            pass
+                        try:
+                            data['第 5 段'][index] = row[7].split('\n')[1].replace('\n', '')
+                        except:
+                            pass
+                        try:
+                            data['第 6 段'][index] = row[8].split('\n')[1].replace('\n', '')
+                        except:
+                            pass
 
-        # else:
-        #     print("未找到目标表格。")
+        else:
+            print("未找到目标表格。")
 
 
         ## append data to df
@@ -481,7 +509,7 @@ for date in dates_2023 if year == 2023 else dates_2024:
 
 
 # 关闭浏览器
-# driver.quit()
+driver.quit()
 
 
 # loop through each row
