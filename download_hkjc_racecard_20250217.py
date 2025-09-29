@@ -361,16 +361,21 @@ for race_no in range(1, 12):
             df.loc[index, '上次第 4 段'] = last_match['第 4 段'].values[0]
             df.loc[index, '上次第 5 段'] = last_match['第 5 段'].values[0]
             df.loc[index, '上次第 6 段'] = last_match['第 6 段'].values[0]
+            df.loc[index, '上次最後 400'] = None
             df.loc[index, '上次最後 800'] = None
 
             ## calculate the last 800 and round to 2 decimal places
             if not np.isnan(last_match['第 6 段'].values[0]):
+                df.loc[index, '上次最後 400'] = round(last_match['第 6 段'].values[0], 2)
                 df.loc[index, '上次最後 800'] = round(last_match['第 5 段'].values[0] + last_match['第 6 段'].values[0], 2)
             elif not np.isnan(last_match['第 5 段'].values[0]):
+                df.loc[index, '上次最後 400'] = round(last_match['第 5 段'].values[0], 2)
                 df.loc[index, '上次最後 800'] = round(last_match['第 4 段'].values[0] + last_match['第 5 段'].values[0], 2)
             elif not np.isnan(last_match['第 4 段'].values[0]):
+                df.loc[index, '上次最後 400'] = round(last_match['第 4 段'].values[0], 2)
                 df.loc[index, '上次最後 800'] = round(last_match['第 3 段'].values[0] + last_match['第 4 段'].values[0], 2)
             elif not np.isnan(last_match['第 3 段'].values[0]):
+                df.loc[index, '上次最後 400'] = round(last_match['第 3 段'].values[0], 2)
                 df.loc[index, '上次最後 800'] = round(last_match['第 2 段'].values[0] + last_match['第 3 段'].values[0], 2)
 
             factor = 0
@@ -534,12 +539,16 @@ for race_no in range(1, 12):
 
                 ## calculate the last 800 and round to 2 decimal places
                 if not np.isnan(last_match['第 6 段'].values[0]):
+                    df.loc[index, '前次最後 400'] = round(last_match['第 6 段'].values[0], 2)
                     df.loc[index, '前次最後 800'] = round(last_match['第 5 段'].values[0] + last_match['第 6 段'].values[0], 2)
                 elif not np.isnan(last_match['第 5 段'].values[0]):
+                    df.loc[index, '前次最後 400'] = round(last_match['第 5 段'].values[0], 2)
                     df.loc[index, '前次最後 800'] = round(last_match['第 4 段'].values[0] + last_match['第 5 段'].values[0], 2)
                 elif not np.isnan(last_match['第 4 段'].values[0]):
+                    df.loc[index, '前次最後 400'] = round(last_match['第 4 段'].values[0], 2)
                     df.loc[index, '前次最後 800'] = round(last_match['第 3 段'].values[0] + last_match['第 4 段'].values[0], 2)
                 elif not np.isnan(last_match['第 3 段'].values[0]):
+                    df.loc[index, '前次最後 400'] = round(last_match['第 3 段'].values[0], 2)
                     df.loc[index, '前次最後 800'] = round(last_match['第 2 段'].values[0] + last_match['第 3 段'].values[0], 2)
 
                 factor = 0
@@ -679,7 +688,23 @@ for race_no in range(1, 12):
 
         ## calculate 2次較快完成秒速 min(上次調整後完成秒速, 前次調整後完成秒速)
         valid_times = [time for time in [df.loc[index, '上次調整後完成秒速'], df.loc[index, '前次調整後完成秒速']] if time is not None]
-        df.loc[index, '2次較快完成秒速'] = min(valid_times) if valid_times else None        
+        if valid_times:
+            if len(valid_times) == 1:
+                df.loc[index, '近2次較快完成秒速'] = df.loc[index, '上次調整後完成秒速']
+                df.loc[index, '近2次較快完成最後 400'] = df.loc[index, '上次最後 400']
+                df.loc[index, '近2次較快完成最後 800'] = df.loc[index, '上次最後 800']
+            else:
+                df.loc[index, '近2次較快完成秒速'] = min(valid_times)
+                if df.loc[index, '近2次較快完成秒速'] == valid_times[0]:
+                    df.loc[index, '近2次較快完成最後 400'] = df.loc[index, '上次最後 400']
+                    df.loc[index, '近2次較快完成最後 800'] = df.loc[index, '上次最後 800']
+                else:
+                    df.loc[index, '近2次較快完成最後 400'] = df.loc[index, '前次最後 400']
+                    df.loc[index, '近2次較快完成最後 800'] = df.loc[index, '前次最後 800']
+        else:
+            df.loc[index, '近2次較快完成秒速'] = None
+            df.loc[index, '近2次較快完成最後 400'] = None
+            df.loc[index, '近2次較快完成最後 800'] = None
 
 
     ## export to excel file 
@@ -699,6 +724,41 @@ with pd.ExcelWriter(output_file, engine='openpyxl') as writer:
         df.to_excel(writer, sheet_name=f"Race_{race_no}", index=False)
 
 
+
+## Terry AI
+output_file = f"Racecard_{race_date.strftime('%Y%m%d')}_Terry.xlsx"  # 替换为输出的 Excel 文件路径
+
+with pd.ExcelWriter(output_file, engine='openpyxl') as writer:
+    for race_no in range(1, 12):
+        df = pd.read_excel(f"Racecard_{race_date.strftime('%Y%m%d')}_{race_no}.xlsx")
+
+        try:
+            df_alfred = df[['場次', '班次', '路程', '馬匹編號', '馬名', '騎師', '練馬師', '評分', '上次日期', '上次班次', '上次場地狀況', '負磅', '上次負磅', '上次負磅 +/-', '檔位', '上次檔位', '上次檔位 +/-', '最佳時間', '近2次較快完成秒速', '近2次較快完成最後 400', '近2次較快完成最後 800']]
+
+            ## 在'上次日期'後面插入一列'上賽距今日數'
+            df_alfred.insert(df_alfred.columns.get_loc('上次日期') + 1, '上賽距今日數', None)
+
+            ## 在'上次完成時間'後面插入一列'彎位400'
+            df_alfred.insert(df_alfred.columns.get_loc('近2次較快完成秒速') + 1, '彎位400', None)
+
+            race_date_ts = pd.Timestamp(race_date)
+            for index, row in df_alfred.iterrows():
+                if row['上次日期'] is not None and not pd.isna(row['上次日期']):
+                    last_date = pd.to_datetime(row['上次日期'])
+                    df_alfred.at[index, '上賽距今日數'] = (race_date_ts - last_date).days
+
+                ## 彎位400 = 上次最後 800 - 上次最後 400
+                if row['近2次較快完成最後 800'] is not None and not pd.isna(row['近2次較快完成最後 800']) and row['近2次較快完成最後 400'] is not None and not pd.isna(row['近2次較快完成最後 400']):
+                    df_alfred.at[index, '彎位400'] = round(row['近2次較快完成最後 800'] - row['近2次較快完成最後 400'], 2)
+
+            print(df_alfred.tail(10))
+
+            df_alfred.to_excel(writer, sheet_name=f"Race_{race_no}", index=False)
+        except Exception as e:
+            # print(f"Error processing Race sheet for {race_date} Race {race_no}: {e}")
+            pass
+
+
 ## Alfred AI
 output_file = f"Racecard_{race_date.strftime('%Y%m%d')}_Alfred.xlsx"  # 替换为输出的 Excel 文件路径
 
@@ -707,16 +767,23 @@ with pd.ExcelWriter(output_file, engine='openpyxl') as writer:
         df = pd.read_excel(f"Racecard_{race_date.strftime('%Y%m%d')}_{race_no}.xlsx")
 
         try:
-            df_alfred = df[['場次', '班次', '路程', '馬匹編號', '馬名', '騎師', '評分', '上次日期', '上次班次', '上次場地狀況', '負磅', '上次負磅', '上次負磅 +/-', '檔位', '上次檔位', '上次檔位 +/-', '最佳時間', '上次完成時間', '上次最後 800']]
+            df_alfred = df[['場次', '班次', '路程', '馬匹編號', '馬名', '騎師', '評分', '上次日期', '上次班次', '上次場地狀況', '負磅', '上次負磅', '上次負磅 +/-', '檔位', '上次檔位', '上次檔位 +/-', '最佳時間', '上次完成時間', '上次最後 400', '上次最後 800']]
 
             ## 在'上次日期'後面插入一列'上賽距今日數'
             df_alfred.insert(df_alfred.columns.get_loc('上次日期') + 1, '上賽距今日數', None)
+
+            ## 在'上次完成時間'後面插入一列'灣位400'
+            df_alfred.insert(df_alfred.columns.get_loc('上次完成時間') + 1, '灣位400', None)
 
             race_date_ts = pd.Timestamp(race_date)
             for index, row in df_alfred.iterrows():
                 if row['上次日期'] is not None and not pd.isna(row['上次日期']):
                     last_date = pd.to_datetime(row['上次日期'])
                     df_alfred.at[index, '上賽距今日數'] = (race_date_ts - last_date).days
+
+                ## 灣位400 = 上次最後 800 - 上次最後 400
+                if row['上次最後 800'] is not None and not pd.isna(row['上次最後 800']) and row['上次最後 400'] is not None and not pd.isna(row['上次最後 400']):
+                    df_alfred.at[index, '灣位400'] = round(row['上次最後 800'] - row['上次最後 400'], 2)
 
             print(df_alfred.tail(10))
 
