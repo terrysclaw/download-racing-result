@@ -14,7 +14,7 @@ df_results = pd.concat([df_2024, df_2025], ignore_index=True)
 
 
 # 下載最新排位表
-race_date = date(2025, 10, 1)
+race_date = date(2025, 10, 4)
 race_course = "ST"  # ST / HV
 
 # URL to scrape HKJC racing results
@@ -248,6 +248,9 @@ for race_no in range(1, 12):
     for index, row in df.iterrows():
         df.loc[index, '上次總場次'] = None
         df.loc[index, '上次日期'] = None
+        df.loc[index, '上次馬場'] = None
+        df.loc[index, '上次泥草'] = None
+        df.loc[index, '上次場次'] = None
         df.loc[index, '上次班次'] = None
         df.loc[index, '上次路程'] = None
         df.loc[index, '上次場地狀況'] = None
@@ -278,6 +281,9 @@ for race_no in range(1, 12):
 
         df.loc[index, '前次總場次'] = None
         df.loc[index, '前次日期'] = None
+        df.loc[index, '前次馬場'] = None
+        df.loc[index, '前次泥草'] = None
+        df.loc[index, '前次場次'] = None
         df.loc[index, '前次班次'] = None
         df.loc[index, '前次路程'] = None
         df.loc[index, '前次場地狀況'] = None
@@ -327,6 +333,9 @@ for race_no in range(1, 12):
         if not last_match.empty:
             df.loc[index, '上次總場次'] = last_match['總場次'].values[0]
             df.loc[index, '上次日期'] = last_match['日期'].values[0]
+            df.loc[index, '上次馬場'] = last_match['馬場'].values[0]
+            df.loc[index, '上次泥草'] = last_match['泥草'].values[0]
+            df.loc[index, '上次場次'] = last_match['場次'].values[0]
             df.loc[index, '上次班次'] = last_match['班次'].values[0]
             df.loc[index, '上次路程'] = last_match['路程'].values[0]
             df.loc[index, '上次場地狀況'] = last_match['場地狀況'].values[0]
@@ -500,6 +509,9 @@ for race_no in range(1, 12):
             if not last_match.empty and last_match['總場次'].values[0] != df.loc[index, '上次總場次']:
                 df.loc[index, '前次總場次'] = last_match['總場次'].values[0]
                 df.loc[index, '前次日期'] = last_match['日期'].values[0]
+                df.loc[index, '前次馬場'] = last_match['馬場'].values[0]
+                df.loc[index, '前次泥草'] = last_match['泥草'].values[0]
+                df.loc[index, '前次場次'] = last_match['場次'].values[0]
                 df.loc[index, '前次班次'] = last_match['班次'].values[0]
                 df.loc[index, '前次路程'] = last_match['路程'].values[0]
                 df.loc[index, '前次場地狀況'] = last_match['場地狀況'].values[0]
@@ -690,18 +702,34 @@ for race_no in range(1, 12):
         valid_times = [time for time in [df.loc[index, '上次調整後完成秒速'], df.loc[index, '前次調整後完成秒速']] if time is not None]
         if valid_times:
             if len(valid_times) == 1:
+                df.loc[index, '近2次較快完成日期'] = df.loc[index, '上次日期']
+                df.loc[index, '近2次較快完成馬場'] = df.loc[index, '上次馬場']
+                df.loc[index, '近2次較快完成泥草'] = df.loc[index, '上次泥草']
+                df.loc[index, '近2次較快完成場次'] = df.loc[index, '上次場次']
                 df.loc[index, '近2次較快完成秒速'] = df.loc[index, '上次調整後完成秒速']
                 df.loc[index, '近2次較快完成最後 400'] = df.loc[index, '上次最後 400']
                 df.loc[index, '近2次較快完成最後 800'] = df.loc[index, '上次最後 800']
             else:
                 df.loc[index, '近2次較快完成秒速'] = min(valid_times)
                 if df.loc[index, '近2次較快完成秒速'] == valid_times[0]:
+                    df.loc[index, '近2次較快完成日期'] = df.loc[index, '上次日期']
+                    df.loc[index, '近2次較快完成馬場'] = df.loc[index, '上次馬場']
+                    df.loc[index, '近2次較快完成泥草'] = df.loc[index, '上次泥草']
+                    df.loc[index, '近2次較快完成場次'] = df.loc[index, '上次場次']
                     df.loc[index, '近2次較快完成最後 400'] = df.loc[index, '上次最後 400']
                     df.loc[index, '近2次較快完成最後 800'] = df.loc[index, '上次最後 800']
                 else:
+                    df.loc[index, '近2次較快完成日期'] = df.loc[index, '前次日期']
+                    df.loc[index, '近2次較快完成馬場'] = df.loc[index, '前次馬場']
+                    df.loc[index, '近2次較快完成泥草'] = df.loc[index, '前次泥草']
+                    df.loc[index, '近2次較快完成場次'] = df.loc[index, '前次場次']
                     df.loc[index, '近2次較快完成最後 400'] = df.loc[index, '前次最後 400']
                     df.loc[index, '近2次較快完成最後 800'] = df.loc[index, '前次最後 800']
         else:
+            df.loc[index, '近2次較快完成日期'] = None
+            df.loc[index, '近2次較快完成馬場'] = None
+            df.loc[index, '近2次較快完成泥草'] = None
+            df.loc[index, '近2次較快完成場次'] = None
             df.loc[index, '近2次較快完成秒速'] = None
             df.loc[index, '近2次較快完成最後 400'] = None
             df.loc[index, '近2次較快完成最後 800'] = None
@@ -733,27 +761,31 @@ with pd.ExcelWriter(output_file, engine='openpyxl') as writer:
         df = pd.read_excel(f"Racecard_{race_date.strftime('%Y%m%d')}_{race_no}.xlsx")
 
         try:
-            df_alfred = df[['場次', '班次', '路程', '馬匹編號', '馬名', '騎師', '練馬師', '評分', '上次日期', '上次班次', '上次場地狀況', '負磅', '上次負磅', '上次負磅 +/-', '檔位', '上次檔位', '上次檔位 +/-', '最佳時間', '近2次較快完成秒速', '近2次較快完成最後 400', '近2次較快完成最後 800']]
+            df_terry = df[['場次', '班次', '路程', '馬匹編號', '馬名', '騎師', '練馬師', '評分', '上次日期', '上次班次', '上次場地狀況', '負磅', '上次負磅', '上次負磅 +/-', '檔位', '上次檔位', '上次檔位 +/-', '最佳時間', '近2次較快完成秒速', '近2次較快完成最後 400', '近2次較快完成最後 800']]
 
             ## 在'上次日期'後面插入一列'上賽距今日數'
-            df_alfred.insert(df_alfred.columns.get_loc('上次日期') + 1, '上賽距今日數', None)
+            df_terry.insert(df_terry.columns.get_loc('上次日期') + 1, '上賽距今日數', None)
 
             ## 在'上次完成時間'後面插入一列'彎位400'
-            df_alfred.insert(df_alfred.columns.get_loc('近2次較快完成秒速') + 1, '彎位400', None)
+            df_terry.insert(df_terry.columns.get_loc('近2次較快完成秒速') + 1, '彎位400', None)
 
             race_date_ts = pd.Timestamp(race_date)
-            for index, row in df_alfred.iterrows():
+            for index, row in df_terry.iterrows():
                 if row['上次日期'] is not None and not pd.isna(row['上次日期']):
                     last_date = pd.to_datetime(row['上次日期'])
-                    df_alfred.at[index, '上賽距今日數'] = (race_date_ts - last_date).days
+                    df_terry.at[index, '上賽距今日數'] = (race_date_ts - last_date).days
 
                 ## 彎位400 = 上次最後 800 - 上次最後 400
                 if row['近2次較快完成最後 800'] is not None and not pd.isna(row['近2次較快完成最後 800']) and row['近2次較快完成最後 400'] is not None and not pd.isna(row['近2次較快完成最後 400']):
-                    df_alfred.at[index, '彎位400'] = round(row['近2次較快完成最後 800'] - row['近2次較快完成最後 400'], 2)
+                    df_terry.at[index, '彎位400'] = round(row['近2次較快完成最後 800'] - row['近2次較快完成最後 400'], 2)
 
-            print(df_alfred.tail(10))
+                ## add a column '賽事重溫連結' with value
+                df_terry.at[index, '賽事重溫連結'] = f"https://racing.hkjc.com/racing/video/play.asp?type=replay-full&date={race_date.strftime('%Y%m%d')}&no={race_no:02d}&lang=chi"
+                # df_alfred.at[index, '賽事重溫連結'] = f"https://racing.hkjc.com/racing/video/play.asp?type=replay-full&date=20250420&no=06&lang=chi"
 
-            df_alfred.to_excel(writer, sheet_name=f"Race_{race_no}", index=False)
+            print(df_terry.tail(10))
+
+            df_terry.to_excel(writer, sheet_name=f"Race_{race_no}", index=False)
         except Exception as e:
             # print(f"Error processing Race sheet for {race_date} Race {race_no}: {e}")
             pass

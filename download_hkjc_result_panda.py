@@ -21,8 +21,18 @@ driver = webdriver.Chrome(service=service)
 
 
 year = 2025
+# df.to_excel(f'raceresult_{year}.xlsx', index=False)
 
-df = pd.DataFrame({})
+# df = pd.DataFrame({})
+load_file = f'raceresult_{year}.xlsx'
+try:
+    df = pd.read_excel(load_file)
+    print(f"Loaded existing file: {load_file}")
+except FileNotFoundError:
+    df = pd.DataFrame({})
+    print(f"No existing file found. Creating new DataFrame.")
+
+
 
 
 ## create date range from 2023/09/01 to 2024/07/14
@@ -209,12 +219,13 @@ dates_2024 = [
 ]
 
 dates_2025 = [
-    {'date': date(2025, 9, 7), 'course': 'ST'},
-    {'date': date(2025, 9, 10), 'course': 'HV'},
-    {'date': date(2025, 9, 14), 'course': 'ST'},
-    {'date': date(2025, 9, 17), 'course': 'HV'},
-    {'date': date(2025, 9, 21), 'course': 'ST'},
-    {'date': date(2025, 9, 28), 'course': 'ST'},
+    # {'date': date(2025, 9, 7), 'course': 'ST'},
+    # {'date': date(2025, 9, 10), 'course': 'HV'},
+    # {'date': date(2025, 9, 14), 'course': 'ST'},
+    # {'date': date(2025, 9, 17), 'course': 'HV'},
+    # {'date': date(2025, 9, 21), 'course': 'ST'},
+    # {'date': date(2025, 9, 28), 'course': 'ST'},
+    {'date': date(2025, 10, 1), 'course': 'ST'},
 ]
 
 # Loop through each date
@@ -513,20 +524,20 @@ driver.quit()
 
 
 # loop through each row
-for index, row in df.iterrows():
-    # get next match 馬名
-    next_match = df[(df['馬名'] == row['馬名']) & (df['總場次'] > row['總場次'])].head(1)
+# for index, row in df.iterrows():
+#     # get next match 馬名
+#     next_match = df[(df['馬名'] == row['馬名']) & (df['總場次'] > row['總場次'])].head(1)
     
-    if not next_match.empty:
-        df.loc[index, '再出總場次'] = next_match['總場次'].values[0]
-        df.loc[index, '再出名次'] = next_match['名次'].values[0]
-        df.loc[index, '再出騎師'] = next_match['騎師'].values[0]
-        df.loc[index, '再出獨贏賠率'] = next_match['獨贏賠率'].values[0]
-    else:
-        df.loc[index, '再出總場次'] = None
-        df.loc[index, '再出名次'] = None
-        df.loc[index, '再出騎師'] = None
-        df.loc[index, '再出獨贏賠率'] = None
+#     if not next_match.empty:
+#         df.loc[index, '再出總場次'] = next_match['總場次'].values[0]
+#         df.loc[index, '再出名次'] = next_match['名次'].values[0]
+#         df.loc[index, '再出騎師'] = next_match['騎師'].values[0]
+#         df.loc[index, '再出獨贏賠率'] = next_match['獨贏賠率'].values[0]
+#     else:
+#         df.loc[index, '再出總場次'] = None
+#         df.loc[index, '再出名次'] = None
+#         df.loc[index, '再出騎師'] = None
+#         df.loc[index, '再出獨贏賠率'] = None
 
 
 # Write the DataFrame to an Excel file
