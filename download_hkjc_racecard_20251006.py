@@ -14,8 +14,8 @@ df_results = pd.concat([df_2024, df_2025], ignore_index=True)
 
 
 # 下載最新排位表
-race_date = date(2025, 10, 8)
-race_course = "HV"  # ST / HV
+race_date = date(2025, 11, 9)
+race_course = "ST"  # ST / HV
 
 # URL to scrape HKJC racing results
 for race_no in range(1, 12):
@@ -283,8 +283,12 @@ for race_no in range(1, 12):
 
 
         # 找上次同程紀錄
-        last_match = df_results[(df_results['布號'] == row['烙號']) & (df_results['馬場'] == row['馬場']) & (
-            df_results['泥草'] == row['泥草']) & (df_results['路程'] == row['路程']) & (df_results['獨贏賠率'] > 0)].tail(1)
+        if row['泥草'] == '草地':	
+            last_match = df_results[(df_results['布號'] == row['烙號']) & (df_results['馬場'] == row['馬場']) & (
+                df_results['泥草'] == row['泥草']) & (df_results['場地狀況'] != '軟地') & (df_results['場地狀況'] != '黏地') & (df_results['路程'] == row['路程']) & (df_results['獨贏賠率'] > 0)].tail(1)
+        else:
+            last_match = df_results[(df_results['布號'] == row['烙號']) & (df_results['馬場'] == row['馬場']) & (
+                df_results['泥草'] == row['泥草']) & (df_results['路程'] == row['路程']) & (df_results['獨贏賠率'] > 0)].tail(1)
 
         if not last_match.empty:
             df.loc[index, '上次總場次'] = last_match['總場次'].values[0]
@@ -320,7 +324,18 @@ for race_no in range(1, 12):
             df.loc[index, '上次賽事時間4'] = last_match['賽事時間4'].values[0]
             df.loc[index, '上次賽事時間5'] = last_match['賽事時間5'].values[0]
             df.loc[index, '上次賽事時間6'] = last_match['賽事時間6'].values[0]
+            
+            if df.loc[index, '路程'] >= 1000 and df.loc[index, '路程'] <= 1200:
+                df.at[index, '上次賽事時間'] = last_match['賽事時間3'].values[0]
+            elif df.loc[index, '路程'] > 1200 and df.loc[index, '路程'] <= 1650:
+                df.at[index, '上次賽事時間'] = last_match['賽事時間4'].values[0]
+            elif df.loc[index, '路程'] > 1650 and df.loc[index, '路程'] <= 2000:
+                df.at[index, '上次賽事時間'] = last_match['賽事時間5'].values[0]
+            elif df.loc[index, '路程'] > 2000:
+                df.at[index, '上次賽事時間'] = last_match['賽事時間6'].values[0]
+                
             df.loc[index, '上次完成時間'] = last_match['完成時間'].values[0]
+
             df.loc[index, '上次第 1 段'] = last_match['第 1 段'].values[0]
             df.loc[index, '上次第 2 段'] = last_match['第 2 段'].values[0]
             df.loc[index, '上次第 3 段'] = last_match['第 3 段'].values[0]
@@ -332,6 +347,7 @@ for race_no in range(1, 12):
 
             # calculate the last 800 and round to 2 decimal places
             if not np.isnan(last_match['第 6 段'].values[0]):
+                df.loc[index, '上次頭段完成時間'] = last_match['賽事時間5'].values[0]
                 df.loc[index, '上次頭段'] = round(
                     last_match['第 1 段'].values[0] + last_match['第 2 段'].values[0] + last_match['第 3 段'].values[0] + last_match['第 4 段'].values[0], 2)
                 df.loc[index, '上次彎位 400'] = round(
@@ -341,8 +357,9 @@ for race_no in range(1, 12):
                 df.loc[index, '上次最後 800'] = round(
                     last_match['第 5 段'].values[0] + last_match['第 6 段'].values[0], 2)
             elif not np.isnan(last_match['第 5 段'].values[0]):
+                df.loc[index, '上次頭段完成時間'] = last_match['賽事時間4'].values[0]
                 df.loc[index, '上次頭段'] = round(
-                    last_match['第 1 段'].values[0] + last_match['第 2 段'].values[0] + last_match['第 3 段'].values[0] + last_match['第 4 段'].values[0], 2)
+                    last_match['第 1 段'].values[0] + last_match['第 2 段'].values[0] + last_match['第 3 段'].values[0], 2)
                 df.loc[index, '上次彎位 400'] = round(
                     last_match['第 4 段'].values[0], 2)
                 df.loc[index, '上次最後 400'] = round(
@@ -350,6 +367,7 @@ for race_no in range(1, 12):
                 df.loc[index, '上次最後 800'] = round(
                     last_match['第 4 段'].values[0] + last_match['第 5 段'].values[0], 2)
             elif not np.isnan(last_match['第 4 段'].values[0]):
+                df.loc[index, '上次頭段完成時間'] = last_match['賽事時間3'].values[0]
                 df.loc[index, '上次頭段'] = round(
                     last_match['第 1 段'].values[0] + last_match['第 2 段'].values[0], 2)
                 df.loc[index, '上次彎位 400'] = round(
@@ -359,6 +377,7 @@ for race_no in range(1, 12):
                 df.loc[index, '上次最後 800'] = round(
                     last_match['第 3 段'].values[0] + last_match['第 4 段'].values[0], 2)
             elif not np.isnan(last_match['第 3 段'].values[0]):
+                df.loc[index, '上次頭段完成時間'] = last_match['賽事時間2'].values[0]
                 df.loc[index, '上次頭段'] = round(
                     last_match['第 1 段'].values[0], 2)
                 df.loc[index, '上次彎位 400'] = round(
@@ -368,75 +387,74 @@ for race_no in range(1, 12):
                 df.loc[index, '上次最後 800'] = round(
                     last_match['第 2 段'].values[0] + last_match['第 3 段'].values[0], 2)
 
-            factor = 0
-            if not np.isnan(df.loc[index, '上次負磅 +/-']):
-                if df.loc[index, '路程'] == 1000:
-                    factor += (df.loc[index, '上次負磅 +/-'] * 0.015 / 1000 * 600)
-                    factor += (df.loc[index, '上次負磅 +/-'] * 0.056 / 1000 * 400)
-                elif df.loc[index, '路程'] == 1200:
-                    factor += (df.loc[index, '上次負磅 +/-'] * 0.017 / 1200 * 800)
-                    factor += (df.loc[index, '上次負磅 +/-'] * 0.056 / 1200 * 400)
-                elif df.loc[index, '路程'] == 1400:
-                    factor += (df.loc[index, '上次負磅 +/-'] * 0.018 / 1400 * 1000)
-                    factor += (df.loc[index, '上次負磅 +/-'] * 0.056 / 1400 * 400)
-                elif df.loc[index, '路程'] == 1600:
-                    factor += (df.loc[index, '上次負磅 +/-'] * 0.019 / 1600 * 1200)
-                    factor += (df.loc[index, '上次負磅 +/-'] * 0.056 / 1600 * 400)
-                elif df.loc[index, '路程'] == 1650:
-                    factor += (df.loc[index, '上次負磅 +/-'] * 0.019 / 1650 * 1250)
-                    factor += (df.loc[index, '上次負磅 +/-'] * 0.056 / 1650 * 400)
-                elif df.loc[index, '路程'] == 1800:
-                    factor += (df.loc[index, '上次負磅 +/-'] * 0.021 / 1800 * 1400)
-                    factor += (df.loc[index, '上次負磅 +/-'] * 0.056 / 1800 * 400)
-                elif df.loc[index, '路程'] == 2000:
-                    factor += (df.loc[index, '上次負磅 +/-'] * 0.022 / 2000 * 1600)
-                    factor += (df.loc[index, '上次負磅 +/-'] * 0.056 / 2000 * 400)
-                elif df.loc[index, '路程'] == 2200:
-                    factor += (df.loc[index, '上次負磅 +/-'] * 0.023 / 2200 * 1800)
-                    factor += (df.loc[index, '上次負磅 +/-'] * 0.056 / 2200 * 400)
-                elif df.loc[index, '路程'] == 2400:
-                    factor += (df.loc[index, '上次負磅 +/-'] * 0.024 / 2400 * 2000)
-                    factor += (df.loc[index, '上次負磅 +/-'] * 0.056 / 2400 * 400)
 
-                # factor = df.loc[index, '上次負磅 +/-'] * 0.015
-
-            if not np.isnan(df.loc[index, '上次檔位 +/-']):
+            time_adjustment = 0
+            if not np.isnan(df.loc[index, '上次負磅 +/-']) and not np.isnan(df.loc[index, '上次檔位 +/-']):
                 if df.loc[index, '馬場'] == 'HV':
                     if df.loc[index, '路程'] == 1000:
-                        factor += df.loc[index, '上次檔位 +/-'] * 0.012
+                        time_adjustment += (df.loc[index, '上次負磅 +/-'] * 0.015 / 1000 * 600)
+                        time_adjustment += (df.loc[index, '上次負磅 +/-'] * 0.056 / 1000 * 400)
+                        time_adjustment += df.loc[index, '上次檔位 +/-'] * 0.02
                     elif df.loc[index, '路程'] == 1200:
-                        factor += df.loc[index, '上次檔位 +/-'] * 0.035
+                        time_adjustment += (df.loc[index, '上次負磅 +/-'] * 0.017 / 1200 * 800)
+                        time_adjustment += (df.loc[index, '上次負磅 +/-'] * 0.056 / 1200 * 400)
+                        time_adjustment += df.loc[index, '上次檔位 +/-'] * 0.033
                     elif df.loc[index, '路程'] == 1650:
-                        factor += df.loc[index, '上次檔位 +/-'] * 0.040
+                        time_adjustment += (df.loc[index, '上次負磅 +/-'] * 0.019 / 1650 * 1250)
+                        time_adjustment += (df.loc[index, '上次負磅 +/-'] * 0.056 / 1650 * 400)
+                        time_adjustment += df.loc[index, '上次檔位 +/-'] * 0.043
                     elif df.loc[index, '路程'] == 1800:
-                        factor += df.loc[index, '上次檔位 +/-'] * 0.040
+                        time_adjustment += (df.loc[index, '上次負磅 +/-'] * 0.021 / 1800 * 1400)
+                        time_adjustment += (df.loc[index, '上次負磅 +/-'] * 0.056 / 1800 * 400)
+                        time_adjustment += df.loc[index, '上次檔位 +/-'] * 0.048
                     elif df.loc[index, '路程'] == 2200:
-                        factor += df.loc[index, '上次檔位 +/-'] * 0.213
+                        time_adjustment += (df.loc[index, '上次負磅 +/-'] * 0.023 / 2200 * 1800)
+                        time_adjustment += (df.loc[index, '上次負磅 +/-'] * 0.056 / 2200 * 400)
+                        time_adjustment += df.loc[index, '上次檔位 +/-'] * 0.053
                 else:
                     if df.loc[index, '泥草'] == '草地':
                         if df.loc[index, '路程'] == 1000:
-                            factor += df.loc[index, '上次檔位 +/-'] * -0.019
+                            time_adjustment += (df.loc[index, '上次負磅 +/-'] * 0.015 / 1000 * 600)
+                            time_adjustment += (df.loc[index, '上次負磅 +/-'] * 0.056 / 1000 * 400)
+                            time_adjustment += df.loc[index, '上次檔位 +/-'] * -0.019
                         elif df.loc[index, '路程'] == 1200:
-                            factor += df.loc[index, '上次檔位 +/-'] * 0.042
+                            time_adjustment += (df.loc[index, '上次負磅 +/-'] * 0.017 / 1200 * 800)
+                            time_adjustment += (df.loc[index, '上次負磅 +/-'] * 0.056 / 1200 * 400)
+                            time_adjustment += df.loc[index, '上次檔位 +/-'] * 0.028
                         elif df.loc[index, '路程'] == 1400:
-                            factor += df.loc[index, '上次檔位 +/-'] * 0.018
+                            time_adjustment += (df.loc[index, '上次負磅 +/-'] * 0.018 / 1400 * 1000)
+                            time_adjustment += (df.loc[index, '上次負磅 +/-'] * 0.056 / 1400 * 400)
+                            time_adjustment += df.loc[index, '上次檔位 +/-'] * 0.033
                         elif df.loc[index, '路程'] == 1600:
-                            factor += df.loc[index, '上次檔位 +/-'] * 0.021
+                            time_adjustment += (df.loc[index, '上次負磅 +/-'] * 0.019 / 1600 * 1200)
+                            time_adjustment += (df.loc[index, '上次負磅 +/-'] * 0.056 / 1600 * 400)
+                            time_adjustment += df.loc[index, '上次檔位 +/-'] * 0.038
                         elif df.loc[index, '路程'] == 1800:
-                            factor += df.loc[index, '上次檔位 +/-'] * 0.056
+                            time_adjustment += (df.loc[index, '上次負磅 +/-'] * 0.021 / 1800 * 1400)
+                            time_adjustment += (df.loc[index, '上次負磅 +/-'] * 0.056 / 1800 * 400)
+                            time_adjustment += df.loc[index, '上次檔位 +/-'] * 0.043
                         elif df.loc[index, '路程'] == 2000:
-                            factor += df.loc[index, '上次檔位 +/-'] * 0.027
+                            time_adjustment += (df.loc[index, '上次負磅 +/-'] * 0.022 / 2000 * 1600)
+                            time_adjustment += (df.loc[index, '上次負磅 +/-'] * 0.056 / 2000 * 400)
+                            time_adjustment += df.loc[index, '上次檔位 +/-'] * 0.048
                         elif df.loc[index, '路程'] == 2400:
-                            factor += df.loc[index, '上次檔位 +/-'] * -0.042
+                            time_adjustment += (df.loc[index, '上次負磅 +/-'] * 0.024 / 2000 * 2000)
+                            time_adjustment += (df.loc[index, '上次負磅 +/-'] * 0.056 / 2000 * 400)
+                            time_adjustment += df.loc[index, '上次檔位 +/-'] * 0.053
                     elif df.loc[index, '泥草'] == '泥地':
                         if df.loc[index, '路程'] == 1200:
-                            factor += df.loc[index, '上次檔位 +/-'] * 0.011
+                            time_adjustment += (df.loc[index, '上次負磅 +/-'] * 0.017 / 1200 * 800)
+                            time_adjustment += (df.loc[index, '上次負磅 +/-'] * 0.056 / 1200 * 400)
+                            time_adjustment += df.loc[index, '上次檔位 +/-'] * 0.028
                         elif df.loc[index, '路程'] == 1650:
-                            factor += df.loc[index, '上次檔位 +/-'] * 0.014
+                            time_adjustment += (df.loc[index, '上次負磅 +/-'] * 0.019 / 1650 * 1250)
+                            time_adjustment += (df.loc[index, '上次負磅 +/-'] * 0.056 / 1650 * 400)
+                            time_adjustment += df.loc[index, '上次檔位 +/-'] * 0.043
                         elif df.loc[index, '路程'] == 1800:
-                            factor += df.loc[index, '上次檔位 +/-'] * -0.011
+                            time_adjustment += (df.loc[index, '上次負磅 +/-'] * 0.021 / 1800 * 1400)
+                            time_adjustment += (df.loc[index, '上次負磅 +/-'] * 0.056 / 1800 * 400)
+                            time_adjustment += df.loc[index, '上次檔位 +/-'] * 0.043
 
-            df.loc[index, '上次調整基數'] = factor
 
             # convert 完成時間 to seconds
             if df.loc[index, '上次完成時間'] is None or df.loc[index, '上次完成時間'] == '---':
@@ -445,7 +463,18 @@ for race_no in range(1, 12):
 
             second = int(df.loc[index, '上次完成時間'].split(':')[
                          0]) * 60 + float(df.loc[index, '上次完成時間'].split(':')[1])
-            second += factor
+            second += time_adjustment
+
+            ## going adjust for 好至快地, 好至黏地
+            if df.loc[index, '上次泥草'] == '草地':
+                if df.loc[index, '上次場地狀況'] == '好地至快地':
+                    if df.loc[index, '上次馬場'] == 'ST':
+                        second = second * 1.004
+                    elif df.loc[index, '上次馬場'] == 'HV':
+                        second = second * 1.006
+                elif df.loc[index, '上次場地狀況'] == '好地至黏地':
+                    second = second / 1.012
+
 
             # convert 101.75 to 1:41.75
             df.loc[index, '上次調整後完成秒速'] = second
@@ -453,16 +482,134 @@ for race_no in range(1, 12):
                    '上次調整後完成時間'] = f"{int(second / 60)}:{round(second % 60, 2)}"
 
             
-            # calculate 上次調整後最後 800
-            proportion = 800 / \
-                df.loc[index, '路程'] if df.loc[index,
-                                              '路程'] and df.loc[index, '路程'] > 0 else 1
 
             if df.loc[index, '上次最後 800'] is not None:
-                df.loc[index, '上次調整後最後 800'] = df.loc[index,
-                                                      '上次最後 800'] + factor * proportion
-            else:
-                df.loc[index, '上次調整後最後 800'] = None
+                time_1 = df.loc[index, '上次彎位 400'] if df.loc[index, '上次彎位 400'] else 0
+                time_2 = df.loc[index, '上次最後 400'] if df.loc[index, '上次最後 400'] else 0
+
+                if not np.isnan(df.loc[index, '上次負磅 +/-']) and not np.isnan(df.loc[index, '上次檔位 +/-']):
+                    if df.loc[index, '馬場'] == 'HV':
+                        if df.loc[index, '路程'] == 1000:
+                            time_1 += (df.loc[index, '上次負磅 +/-'] * 0.015 / 1000 * 400)
+                            time_1 += df.loc[index, '上次檔位 +/-'] * 0.02 / 1000 * 400
+
+                            time_2 += (df.loc[index, '上次負磅 +/-'] * 0.056 / 1000 * 400)
+
+                            df.loc[index, '上次調整後最後 800'] = round(time_1 + time_2, 3)
+                        elif df.loc[index, '路程'] == 1200:
+                            time_1 += (df.loc[index, '上次負磅 +/-'] * 0.017 / 1200 * 400)
+                            time_1 += df.loc[index, '上次檔位 +/-'] * 0.033 / 1200 * 400
+
+                            time_2 += (df.loc[index, '上次負磅 +/-'] * 0.056 / 1200 * 400)
+
+                            df.loc[index, '上次調整後最後 800'] = round(time_1 + time_2, 3)
+                        elif df.loc[index, '路程'] == 1650:
+                            time_1 += (df.loc[index, '上次負磅 +/-'] * 0.019 / 1650 * 400)
+                            time_1 += df.loc[index, '上次檔位 +/-'] * 0.043 / 1650 * 400
+
+                            time_2 += (df.loc[index, '上次負磅 +/-'] * 0.056 / 1650 * 400)
+
+                            df.loc[index, '上次調整後最後 800'] = round(time_1 + time_2, 3)
+                        elif df.loc[index, '路程'] == 1800:
+                            time_1 += (df.loc[index, '上次負磅 +/-'] * 0.021 / 1800 * 400)
+                            time_1 += df.loc[index, '上次檔位 +/-'] * 0.048 / 1800 * 400
+
+                            time_2 += (df.loc[index, '上次負磅 +/-'] * 0.056 / 1800 * 400)
+
+                            df.loc[index, '上次調整後最後 800'] = round(time_1 + time_2, 3)
+                        elif df.loc[index, '路程'] == 2200:
+                            time_1 += (df.loc[index, '上次負磅 +/-'] * 0.023 / 2200 * 400)
+                            time_1 += df.loc[index, '上次檔位 +/-'] * 0.053 / 2200 * 400
+
+                            time_2 += (df.loc[index, '上次負磅 +/-'] * 0.056 / 2200 * 400)
+
+                            df.loc[index, '上次調整後最後 800'] = round(time_1 + time_2, 3)
+                    else:
+                        if df.loc[index, '泥草'] == '草地':
+                            if df.loc[index, '路程'] == 1000:
+                                time_1 += (df.loc[index, '上次負磅 +/-'] * 0.015 / 1000 * 400)
+                                time_1 += df.loc[index, '上次檔位 +/-'] * -0.019 / 1000 * 400
+
+                                time_2 += (df.loc[index, '上次負磅 +/-'] * 0.056 / 1000 * 400)
+
+                                df.loc[index, '上次調整後最後 800'] = round(time_1 + time_2, 3)
+                            elif df.loc[index, '路程'] == 1200:
+                                time_1 += (df.loc[index, '上次負磅 +/-'] * 0.017 / 1200 * 400)
+                                time_1 += df.loc[index, '上次檔位 +/-'] * 0.028 / 1200 * 400
+
+                                time_2 += (df.loc[index, '上次負磅 +/-'] * 0.056 / 1200 * 400)
+
+                                df.loc[index, '上次調整後最後 800'] = round(time_1 + time_2, 3)
+                            elif df.loc[index, '路程'] == 1400:
+                                time_1 += (df.loc[index, '上次負磅 +/-'] * 0.018 / 1400 * 400)
+                                time_1 += df.loc[index, '上次檔位 +/-'] * 0.033 / 1400 * 400
+
+                                time_2 += (df.loc[index, '上次負磅 +/-'] * 0.056 / 1400 * 400)
+
+                                df.loc[index, '上次調整後最後 800'] = round(time_1 + time_2, 3)
+                            elif df.loc[index, '路程'] == 1600:
+                                time_1 += (df.loc[index, '上次負磅 +/-'] * 0.019 / 1600 * 400)
+                                time_1 += df.loc[index, '上次檔位 +/-'] * 0.038 / 1600 * 400
+
+                                time_2 += (df.loc[index, '上次負磅 +/-'] * 0.056 / 1600 * 400)
+                                df.loc[index, '上次調整後最後 800'] = round(time_1 + time_2, 3)
+                            elif df.loc[index, '路程'] == 1800:
+                                time_1 += (df.loc[index, '上次負磅 +/-'] * 0.021 / 1800 * 400)
+                                time_1 += df.loc[index, '上次檔位 +/-'] * 0.043 / 1800 * 400
+
+                                time_2 += (df.loc[index, '上次負磅 +/-'] * 0.056 / 1800 * 400)
+
+                                df.loc[index, '上次調整後最後 800'] = round(time_1 + time_2, 3)
+                            elif df.loc[index, '路程'] == 2000:
+                                time_1 += (df.loc[index, '上次負磅 +/-'] * 0.022 / 2000 * 400)
+                                time_1 += df.loc[index, '上次檔位 +/-'] * 0.048 / 2000 * 400
+
+                                time_2 += (df.loc[index, '上次負磅 +/-'] * 0.056 / 2000 * 400)
+
+                                df.loc[index, '上次調整後最後 800'] = round(time_1 + time_2, 3)
+                            elif df.loc[index, '路程'] == 2400:
+                                time_1 += (df.loc[index, '上次負磅 +/-'] * 0.024 / 2400 * 400)
+                                time_1 += df.loc[index, '上次檔位 +/-'] * 0.053 / 2400 * 400
+
+                                time_2 += (df.loc[index, '上次負磅 +/-'] * 0.056 / 2400 * 400)
+
+                                df.loc[index, '上次調整後最後 800'] = round(time_1 + time_2, 3)
+                        
+                        elif df.loc[index, '泥草'] == '泥地':
+                            if df.loc[index, '路程'] == 1200:
+                                time_1 += (df.loc[index, '上次負磅 +/-'] * 0.017 / 1200 * 400)
+                                time_1 += df.loc[index, '上次檔位 +/-'] * 0.028 / 1200 * 400
+
+                                time_2 += (df.loc[index, '上次負磅 +/-'] * 0.056 / 1200 * 400)
+
+                                df.loc[index, '上次調整後最後 800'] = round(time_1 + time_2, 3)
+                            elif df.loc[index, '路程'] == 1650:
+                                time_1 += (df.loc[index, '上次負磅 +/-'] * 0.019 / 1650 * 400)
+                                time_1 += df.loc[index, '上次檔位 +/-'] * 0.043 / 1650 * 400
+
+                                time_2 += (df.loc[index, '上次負磅 +/-'] * 0.056 / 1650 * 400)
+
+                                df.loc[index, '上次調整後最後 800'] = round(time_1 + time_2, 3)
+                            elif df.loc[index, '路程'] == 1800:
+                                time_1 += (df.loc[index, '上次負磅 +/-'] * 0.021 / 1800 * 400)
+                                time_1 += df.loc[index, '上次檔位 +/-'] * 0.048 / 1800 * 400
+
+                                time_2 += (df.loc[index, '上次負磅 +/-'] * 0.056 / 1800 * 400)
+
+                                df.loc[index, '上次調整後最後 800'] = round(time_1 + time_2, 3)
+
+                    ## going adjust for 好至快地, 好至黏地
+                    if df.loc[index, '上次泥草'] == '草地':
+                        if df.loc[index, '上次場地狀況'] == '好地至快地':
+                            if df.loc[index, '上次馬場'] == 'ST':
+                                df.loc[index, '上次調整後最後 800'] = round(df.loc[index, '上次調整後最後 800'] * 1.004, 3)
+                            elif df.loc[index, '上次馬場'] == 'HV':
+                                df.loc[index, '上次調整後最後 800'] = round(df.loc[index, '上次調整後最後 800'] * 1.006, 3)
+                        elif df.loc[index, '上次場地狀況'] == '好地至黏地':
+                            df.loc[index, '上次調整後最後 800'] = round(df.loc[index, '上次調整後最後 800'] / 1.012, 3)
+
+        else:
+            df.loc[index, '上次調整後最後 800'] = None
 
 
 
@@ -499,11 +646,14 @@ with pd.ExcelWriter(output_file, engine='openpyxl') as writer:
 
         try:
             df_terry = df[['場次', '班次', '路程', '馬匹編號', '馬名', '騎師', '練馬師', '評分', '上次日期', '上次場次', '上次班次', '上次場地狀況', '負磅', '上次負磅', '上次負磅 +/-',
-                           '檔位', '上次檔位', '上次檔位 +/-', '最佳時間', '上次調整後完成時間', '上次調整後完成秒速', '上次彎位 400', '上次最後 400', '上次最後 800', '上次調整後最後 800', '網址']]
+                           '檔位', '上次檔位', '上次檔位 +/-', '最佳時間', '上次賽事時間', '上次完成時間', '上次調整後完成時間', '上次調整後完成秒速', '上次頭段完成時間', '上次頭段', '上次彎位 400', '上次最後 400', '上次最後 800', '上次調整後最後 800', '網址']]
 
             # 在'上次日期'後面插入一列'上賽距今日數'
             df_terry.insert(df_terry.columns.get_loc(
                 '上次日期') + 1, '上賽距今日數', None)
+
+            df_terry.insert(df_terry.columns.get_loc(
+                '上次完成時間') + 1, '上次完成時間 - 上次賽事時間', None)
 
             race_date_ts = pd.Timestamp(race_date)
             for index, row in df_terry.iterrows():
@@ -511,6 +661,21 @@ with pd.ExcelWriter(output_file, engine='openpyxl') as writer:
                     last_date = pd.to_datetime(row['上次日期'])
                     df_terry.at[index, '上賽距今日數'] = (
                         race_date_ts - last_date).days
+
+                    ## add a column 上次完成時間 - 上次賽事時間
+                    df_terry.at[index, '上次完成時間 - 上次賽事時間'] = None
+                    if row['上次完成時間'] is not None and row['上次賽事時間'] is not None:
+                        try:
+                            last_finish_time = int(row['上次完成時間'].split(':')[0]) * 60 + float(row['上次完成時間'].split(':')[1])
+
+                            if row['路程'] >= 1200:
+                                last_race_time = int(row['上次賽事時間'].split(':')[0]) * 60 + float(row['上次賽事時間'].split(':')[1])
+                            else:
+                                last_race_time = float(row['上次賽事時間'])
+
+                            df_terry.at[index, '上次完成時間 - 上次賽事時間'] = last_finish_time - last_race_time
+                        except Exception as e:
+                            pass
 
                     # add a column '賽事結果連結' with value
                     # add a column '賽事重溫連結' with value
@@ -547,7 +712,7 @@ with pd.ExcelWriter(output_file, engine='openpyxl') as writer:
 
         try:
             df_alfred = df[['場次', '班次', '路程', '馬匹編號', '馬名', '騎師', '評分', '上次日期', '上次班次', '上次場地狀況', '負磅', '上次負磅',
-                            '上次負磅 +/-', '檔位', '上次檔位', '上次檔位 +/-', '最佳時間', '上次完成時間', '上次彎位 400', '上次最後 400', '上次最後 800', '網址', '上次場次']]
+                            '上次負磅 +/-', '檔位', '上次檔位', '上次檔位 +/-', '最佳時間', '上次完成時間', '上次頭段完成時間', '上次彎位 400', '上次最後 400', '上次最後 800', '網址', '上次場次']]
 
             # 在'上次日期'後面插入一列'上賽距今日數'
             df_alfred.insert(df_alfred.columns.get_loc(

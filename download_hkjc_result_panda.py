@@ -1,23 +1,9 @@
 import requests
 from bs4 import BeautifulSoup
-# import xlsxwriter
 import pandas as pd
 from datetime import date, timedelta
-
-from selenium import webdriver
-from selenium.webdriver.common.by import By
-from selenium.webdriver.chrome.service import Service
-from selenium.webdriver.support.ui import WebDriverWait
-from selenium.webdriver.support import expected_conditions as EC
 import time
 
-
-# 设置 ChromeDriver 路径
-chrome_driver_path = "chromedriver.exe"  # 替换为您的 ChromeDriver 路径
-
-# 初始化 WebDriver
-service = Service(chrome_driver_path)
-driver = webdriver.Chrome(service=service)
 
 
 year = 2025
@@ -225,7 +211,18 @@ dates_2025 = [
     # {'date': date(2025, 9, 17), 'course': 'HV'},
     # {'date': date(2025, 9, 21), 'course': 'ST'},
     # {'date': date(2025, 9, 28), 'course': 'ST'},
-    {'date': date(2025, 10, 1), 'course': 'ST'},
+    # {'date': date(2025, 10, 1), 'course': 'ST'},
+    # {'date': date(2025, 10, 4), 'course': 'ST'},
+    # {'date': date(2025, 10, 8), 'course': 'HV'},
+    # {'date': date(2025, 10, 12), 'course': 'ST'},
+    # {'date': date(2025, 10, 15), 'course': 'HV'},
+    # {'date': date(2025, 10, 19), 'course': 'ST'},
+    # {'date': date(2025, 10, 22), 'course': 'HV'},
+    # {'date': date(2025, 10, 26), 'course': 'ST'},
+    # {'date': date(2025, 10, 30), 'course': 'ST'},
+    # {'date': date(2025, 11, 2), 'course': 'HV'},
+    # {'date': date(2025, 11, 5), 'course': 'HV'},
+    {'date': date(2025, 11, 9), 'course': 'ST'},
 ]
 
 # Loop through each date
@@ -448,96 +445,71 @@ for date in dates_2024 if year == 2024 else dates_2025:
 
         # # get sectional time
         url = f"https://racing.hkjc.com/racing/information/Chinese/Racing/DisplaySectionalTime.aspx?RaceDate={date['date'].strftime('%d/%m/%Y')}&RaceNo={race_no}"
-        driver.get(url)
 
         # # 等待页面加载完成（根据需要调整等待时间）
-        # time.sleep(3)  # 可以替换为更智能的等待方式，如 WebDriverWait
         try:
-            WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.CLASS_NAME, "search")))
+            response = requests.get(url)
+
+            # # 使用 BeautifulSoup 解析页面内容
+            soup = BeautifulSoup(response.text, 'html.parser')
+
+            # # 查找目标表格
+            race_table = soup.find('table', class_='table_bd')
+
+            if race_table:
+                # 提取表头
+                headers = [th.text.strip() for th in race_table.find('thead').find_all('td')]
+
+                # 提取表格数据
+                rows = []
+                for row in race_table.find('tbody').find_all('tr'):
+                    cells = [cell.text.strip() for cell in row.find_all('td')]
+                    rows.append(cells)
+
+                for row in rows:
+                    code = row[2].split('(')[1].replace(')', '')
+                    
+                    # find the index of the horse in data['布號'] match the code
+                    for index, item in enumerate(data['布號']):
+                        if item == code:
+                            try:
+                                data['第 1 段'][index] = row[3].split('\n')[1].replace('\n', '')
+                            except:
+                                pass
+                            try:
+                                data['第 2 段'][index] = row[4].split('\n')[1].replace('\n', '')
+                            except:
+                                pass
+                            try:
+                                data['第 3 段'][index] = row[5].split('\n')[1].replace('\n', '')
+                            except:
+                                pass
+                            try:                        
+                                data['第 4 段'][index] = row[6].split('\n')[1].replace('\n', '')
+                            except:
+                                pass
+                            try:
+                                data['第 5 段'][index] = row[7].split('\n')[1].replace('\n', '')
+                            except:
+                                pass
+                            try:
+                                data['第 6 段'][index] = row[8].split('\n')[1].replace('\n', '')
+                            except:
+                                pass
+
+            else:
+                print("未找到目标表格。")
+                print(f"Sectional time table not found for {race_date} Race {race_no}: {e}")
+        
         except Exception as e:
-            print(f"Sectional time table not found for {race_date} Race {race_no}: {e}")
+            print(f"Error fetching sectional time for {race_date} Race {race_no}: {e}")
             continue
-
-        # # 获取页面内容
-        page_source = driver.page_source
-
-        # # # 关闭浏览器
-        # driver.quit()
-
-        # # 使用 BeautifulSoup 解析页面内容
-        soup = BeautifulSoup(page_source, 'html.parser')
-
-        # # 查找目标表格
-        race_table = soup.find('table', class_='table_bd')
-
-        if race_table:
-            # 提取表头
-            headers = [th.text.strip() for th in race_table.find('thead').find_all('td')]
-
-            # 提取表格数据
-            rows = []
-            for row in race_table.find('tbody').find_all('tr'):
-                cells = [cell.text.strip() for cell in row.find_all('td')]
-                rows.append(cells)
-
-            for row in rows:
-                code = row[2].split('(')[1].replace(')', '')
-                
-                # find the index of the horse in data['布號'] match the code
-                for index, item in enumerate(data['布號']):
-                    if item == code:
-                        try:
-                            data['第 1 段'][index] = row[3].split('\n')[1].replace('\n', '')
-                        except:
-                            pass
-                        try:
-                            data['第 2 段'][index] = row[4].split('\n')[1].replace('\n', '')
-                        except:
-                            pass
-                        try:
-                            data['第 3 段'][index] = row[5].split('\n')[1].replace('\n', '')
-                        except:
-                            pass
-                        try:                        
-                            data['第 4 段'][index] = row[6].split('\n')[1].replace('\n', '')
-                        except:
-                            pass
-                        try:
-                            data['第 5 段'][index] = row[7].split('\n')[1].replace('\n', '')
-                        except:
-                            pass
-                        try:
-                            data['第 6 段'][index] = row[8].split('\n')[1].replace('\n', '')
-                        except:
-                            pass
-
-        else:
-            print("未找到目标表格。")
 
 
         ## append data to df
         df = df._append(pd.DataFrame(data), ignore_index=True)
 
 
-# 关闭浏览器
-driver.quit()
-
-
-# loop through each row
-# for index, row in df.iterrows():
-#     # get next match 馬名
-#     next_match = df[(df['馬名'] == row['馬名']) & (df['總場次'] > row['總場次'])].head(1)
-    
-#     if not next_match.empty:
-#         df.loc[index, '再出總場次'] = next_match['總場次'].values[0]
-#         df.loc[index, '再出名次'] = next_match['名次'].values[0]
-#         df.loc[index, '再出騎師'] = next_match['騎師'].values[0]
-#         df.loc[index, '再出獨贏賠率'] = next_match['獨贏賠率'].values[0]
-#     else:
-#         df.loc[index, '再出總場次'] = None
-#         df.loc[index, '再出名次'] = None
-#         df.loc[index, '再出騎師'] = None
-#         df.loc[index, '再出獨贏賠率'] = None
 
 
 # Write the DataFrame to an Excel file
