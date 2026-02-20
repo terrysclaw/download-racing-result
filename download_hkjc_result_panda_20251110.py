@@ -22,6 +22,11 @@ class HKJCResultDownloader:
         try:
             df = pd.read_excel(load_file)
             logger.info(f"Loaded existing file: {load_file}")
+            # 23.04_x000D_
+            for i in range(1, 7):
+                col_name = f'第 {i} 段'
+                if col_name in df.columns:
+                    df[col_name] = df[col_name].astype(str).str.replace('nan', '').str.strip()
             return df
         except FileNotFoundError:
             logger.info(f"No existing file found. Creating new DataFrame.")
@@ -37,7 +42,12 @@ class HKJCResultDownloader:
         ]
         
         dates_2025 = [
-            {'date': date(2025, 11, 9), 'course': 'ST'},
+            # {'date': date(2026, 2, 1), 'course': 'ST'},
+            # {'date': date(2026, 2, 4), 'course': 'HV'},
+            # {'date': date(2026, 2, 8), 'course': 'ST'},
+            # {'date': date(2026, 2, 11), 'course': 'HV'},
+            # {'date': date(2026, 2, 14), 'course': 'ST'},
+            {'date': date(2026, 2, 19), 'course': 'ST'},
             # Add more 2025 dates as needed
         ]
         
@@ -175,6 +185,8 @@ class HKJCResultDownloader:
                             if section + 2 < len(cells):
                                 try:
                                     sectional_time = cells[section + 2].split('\n')[1] if '\n' in cells[section + 2] else cells[section + 2]
+                                    # 23.04_x000D_n -> 23.04
+                                    sectional_time = sectional_time.replace('_x000D_n', '').strip()
                                     data[f'第 {section} 段'][index] = sectional_time
                                 except (IndexError, AttributeError):
                                     pass

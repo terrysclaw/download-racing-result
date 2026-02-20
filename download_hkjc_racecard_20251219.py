@@ -220,7 +220,15 @@ class HKJCRacecardDownloader:
             '上次賽事時間4', '上次賽事時間5', '上次賽事時間6', '上次賽事時間', '上次完成時間',
             '上次第 1 段', '上次第 2 段', '上次第 3 段', '上次第 4 段', '上次第 5 段', '上次第 6 段',
             '上次最後 400', '上次最後 800', '上次頭段完成時間', '上次頭段', '上次彎位 400',
-            '上次調整基數', '上次調整後最後 800', '上次調整後完成時間', '上次調整後完成秒速'
+            '上次調整基數', '上次調整後最後 800', '上次調整後完成時間', '上次調整後完成秒速',
+
+            '前次總場次', '前次日期', '前次馬場', '前次泥草', '前次場次', '前次班次', '前次路程',
+            '前次場地狀況', '前次名次', '前次騎師', '前次賠率', '前次負磅', '前次負磅 +/-',
+            '前次檔位', '前次檔位 +/-', '前次賽事時間1', '前次賽事時間2', '前次賽事時間3',
+            '前次賽事時間4', '前次賽事時間5', '前次賽事時間6', '前次賽事時間', '前次完成時間',
+            '前次第 1 段', '前次第 2 段', '前次第 3 段', '前次第 4 段', '前次第 5 段', '前次第 6 段',
+            '前次最後 400', '前次最後 800', '前次頭段完成時間', '前次頭段', '前次彎位 400',
+            '前次調整基數', '前次調整後最後 800', '前次調整後完成時間', '前次調整後完成秒速'
         ]
         
         for col in historical_columns:
@@ -236,7 +244,7 @@ class HKJCRacecardDownloader:
                     (~self.df_results['場地狀況'].isin(['軟地', '黏地'])) &
                     (self.df_results['路程'] == row['路程']) &
                     (self.df_results['獨贏賠率'] > 0)
-                ].tail(1)
+                ].tail(2)
             else:
                 last_match = self.df_results[
                     (self.df_results['布號'] == row['烙號']) &
@@ -244,63 +252,70 @@ class HKJCRacecardDownloader:
                     (self.df_results['泥草'] == row['泥草']) &
                     (self.df_results['路程'] == row['路程']) &
                     (self.df_results['獨贏賠率'] > 0)
-                ].tail(1)
+                ].tail(2)
             
             if not last_match.empty:
-                self._populate_historical_data(df, index, row, last_match.iloc[0])
+                # self._populate_historical_data(df, index, row, last_match.iloc[0])
+                self._populate_historical_data(df, index, row, last_match)
         
         return df
     
-    def _populate_historical_data(self, df: pd.DataFrame, index: int, row: pd.Series, last_match: pd.Series) -> None:
+    def _populate_historical_data(self, df: pd.DataFrame, index: int, row: pd.Series, last_match: pd.DataFrame) -> None:
         """Populate historical data for a horse."""
+        # Reverse to process most recent first
+        for i, (_, match) in enumerate(last_match.iloc[::-1].iterrows(), start=1):
+            prefix = '上次' if i == 1 else '前次'
+            self._populate_single_historical_data(df, index, row, match, prefix)
+
+    def _populate_single_historical_data(self, df: pd.DataFrame, index: int, row: pd.Series, last_match: pd.Series, prefix: str) -> None:
         # Basic historical data
-        df.at[index, '上次總場次'] = last_match['總場次']
-        df.at[index, '上次日期'] = last_match['日期']
-        df.at[index, '上次馬場'] = last_match['馬場']
-        df.at[index, '上次泥草'] = last_match['泥草']
-        df.at[index, '上次場次'] = last_match['場次']
-        df.at[index, '上次班次'] = last_match['班次']
-        df.at[index, '上次路程'] = last_match['路程']
-        df.at[index, '上次場地狀況'] = last_match['場地狀況']
-        df.at[index, '上次名次'] = last_match['名次']
-        df.at[index, '上次騎師'] = last_match['騎師']
-        df.at[index, '上次賠率'] = last_match['獨贏賠率']
-        df.at[index, '上次負磅'] = last_match['實際負磅']
-        df.at[index, '上次檔位'] = last_match['檔位']
+        df.at[index, f'{prefix}總場次'] = last_match['總場次']
+        df.at[index, f'{prefix}日期'] = last_match['日期']
+        df.at[index, f'{prefix}馬場'] = last_match['馬場']
+        df.at[index, f'{prefix}泥草'] = last_match['泥草']
+        df.at[index, f'{prefix}場次'] = last_match['場次']
+        df.at[index, f'{prefix}班次'] = last_match['班次']
+        df.at[index, f'{prefix}路程'] = last_match['路程']
+        df.at[index, f'{prefix}場地狀況'] = last_match['場地狀況']
+        df.at[index, f'{prefix}名次'] = last_match['名次']
+        df.at[index, f'{prefix}騎師'] = last_match['騎師']
+        df.at[index, f'{prefix}賠率'] = last_match['獨贏賠率']
+        df.at[index, f'{prefix}負磅'] = last_match['實際負磅']
+        df.at[index, f'{prefix}檔位'] = last_match['檔位']
         
         # Calculate differences
         if pd.notna(last_match['實際負磅']):
-            df.at[index, '上次負磅 +/-'] = row['負磅'] - last_match['實際負磅']
+            df.at[index, f'{prefix}負磅 +/-'] = row['負磅'] - last_match['實際負磅']
         
         if pd.notna(last_match['檔位']):
-            df.at[index, '上次檔位 +/-'] = row['檔位'] - last_match['檔位']
+            df.at[index, f'{prefix}檔位 +/-'] = row['檔位'] - last_match['檔位']
         
         # Race times
         for i in range(1, 7):
-            df.at[index, f'上次賽事時間{i}'] = last_match[f'賽事時間{i}']
-            df.at[index, f'上次第 {i} 段'] = last_match[f'第 {i} 段']
+            df.at[index, f'{prefix}賽事時間{i}'] = last_match[f'賽事時間{i}']
+            df.at[index, f'{prefix}第 {i} 段'] = last_match[f'第 {i} 段']
         
         # Set appropriate race time based on distance
         distance = row['路程']
         if 1000 <= distance <= 1200:
-            df.at[index, '上次賽事時間'] = last_match['賽事時間3']
+            df.at[index, f'{prefix}賽事時間'] = last_match['賽事時間3']
         elif 1200 < distance <= 1650:
-            df.at[index, '上次賽事時間'] = last_match['賽事時間4']
+            df.at[index, f'{prefix}賽事時間'] = last_match['賽事時間4']
         elif 1650 < distance <= 2000:
-            df.at[index, '上次賽事時間'] = last_match['賽事時間5']
+            df.at[index, f'{prefix}賽事時間'] = last_match['賽事時間5']
         elif distance > 2000:
-            df.at[index, '上次賽事時間'] = last_match['賽事時間6']
+            df.at[index, f'{prefix}賽事時間'] = last_match['賽事時間6']
         
-        df.at[index, '上次完成時間'] = last_match['完成時間']
+        df.at[index, f'{prefix}完成時間'] = last_match['完成時間']
         
         # Calculate sectional times
-        self._calculate_sectional_times(df, index, last_match)
+        self._calculate_sectional_times(df, index, last_match, prefix)
         
         # Calculate time adjustments
-        if pd.notna(df.at[index, '上次完成時間']) and df.at[index, '上次完成時間'] != '---':
-            self._calculate_adjusted_times(df, index, row)
+        if pd.notna(df.at[index, f'{prefix}完成時間']) and df.at[index, f'{prefix}完成時間'] != '---':
+            self._calculate_adjusted_times(df, index, row, prefix)
     
-    def _calculate_sectional_times(self, df: pd.DataFrame, index: int, last_match: pd.Series) -> None:
+    def _calculate_sectional_times(self, df: pd.DataFrame, index: int, last_match: pd.Series, prefix: str) -> None:
         """Calculate sectional time breakdowns."""
         # Find the last available sectional segment
         available_sections = []
@@ -334,56 +349,56 @@ class HKJCRacecardDownloader:
         
         # Calculate sectional times based on available data
         if last_section >= 6:  # 6 sections available
-            df.at[index, '上次頭段完成時間'] = last_match.get('賽事時間5')
-            df.at[index, '上次頭段'] = safe_sum([last_match.get(f'第 {j} 段') for j in range(1, 5)])
-            df.at[index, '上次彎位 400'] = round(safe_float(last_match.get('第 5 段')), 2)
-            df.at[index, '上次最後 400'] = round(safe_float(last_match.get('第 6 段')), 2)
-            df.at[index, '上次最後 800'] = round(safe_float(last_match.get('第 5 段')) + safe_float(last_match.get('第 6 段')), 2)
+            df.at[index, f'{prefix}頭段完成時間'] = last_match.get('賽事時間5')
+            df.at[index, f'{prefix}頭段'] = safe_sum([last_match.get(f'第 {j} 段') for j in range(1, 5)])
+            df.at[index, f'{prefix}彎位 400'] = round(safe_float(last_match.get('第 5 段')), 2)
+            df.at[index, f'{prefix}最後 400'] = round(safe_float(last_match.get('第 6 段')), 2)
+            df.at[index, f'{prefix}最後 800'] = round(safe_float(last_match.get('第 5 段')) + safe_float(last_match.get('第 6 段')), 2)
             
         elif last_section >= 5:  # 5 sections available
-            df.at[index, '上次頭段完成時間'] = last_match.get('賽事時間4')
-            df.at[index, '上次頭段'] = safe_sum([last_match.get(f'第 {j} 段') for j in range(1, 4)])
-            df.at[index, '上次彎位 400'] = round(safe_float(last_match.get('第 4 段')), 2)
-            df.at[index, '上次最後 400'] = round(safe_float(last_match.get('第 5 段')), 2)
-            df.at[index, '上次最後 800'] = round(safe_float(last_match.get('第 4 段')) + safe_float(last_match.get('第 5 段')), 2)
+            df.at[index, f'{prefix}頭段完成時間'] = last_match.get('賽事時間4')
+            df.at[index, f'{prefix}頭段'] = safe_sum([last_match.get(f'第 {j} 段') for j in range(1, 4)])
+            df.at[index, f'{prefix}彎位 400'] = round(safe_float(last_match.get('第 4 段')), 2)
+            df.at[index, f'{prefix}最後 400'] = round(safe_float(last_match.get('第 5 段')), 2)
+            df.at[index, f'{prefix}最後 800'] = round(safe_float(last_match.get('第 4 段')) + safe_float(last_match.get('第 5 段')), 2)
             
         elif last_section >= 4:  # 4 sections available
-            df.at[index, '上次頭段完成時間'] = last_match.get('賽事時間3')
-            df.at[index, '上次頭段'] = safe_sum([last_match.get(f'第 {j} 段') for j in range(1, 3)])
-            df.at[index, '上次彎位 400'] = round(safe_float(last_match.get('第 3 段')), 2)
-            df.at[index, '上次最後 400'] = round(safe_float(last_match.get('第 4 段')), 2)
-            df.at[index, '上次最後 800'] = round(safe_float(last_match.get('第 3 段')) + safe_float(last_match.get('第 4 段')), 2)
+            df.at[index, f'{prefix}頭段完成時間'] = last_match.get('賽事時間3')
+            df.at[index, f'{prefix}頭段'] = safe_sum([last_match.get(f'第 {j} 段') for j in range(1, 3)])
+            df.at[index, f'{prefix}彎位 400'] = round(safe_float(last_match.get('第 3 段')), 2)
+            df.at[index, f'{prefix}最後 400'] = round(safe_float(last_match.get('第 4 段')), 2)
+            df.at[index, f'{prefix}最後 800'] = round(safe_float(last_match.get('第 3 段')) + safe_float(last_match.get('第 4 段')), 2)
             
         elif last_section >= 3:  # 3 sections available
-            df.at[index, '上次頭段完成時間'] = last_match.get('賽事時間2')
-            df.at[index, '上次頭段'] = safe_sum([last_match.get('第 1 段'), last_match.get('第 2 段')])
-            df.at[index, '上次彎位 400'] = round(safe_float(last_match.get('第 2 段')), 2)
-            df.at[index, '上次最後 400'] = round(safe_float(last_match.get('第 3 段')), 2)
-            df.at[index, '上次最後 800'] = round(safe_float(last_match.get('第 2 段')) + safe_float(last_match.get('第 3 段')), 2)
+            df.at[index, f'{prefix}頭段完成時間'] = last_match.get('賽事時間2')
+            df.at[index, f'{prefix}頭段'] = safe_sum([last_match.get('第 1 段'), last_match.get('第 2 段')])
+            df.at[index, f'{prefix}彎位 400'] = round(safe_float(last_match.get('第 2 段')), 2)
+            df.at[index, f'{prefix}最後 400'] = round(safe_float(last_match.get('第 3 段')), 2)
+            df.at[index, f'{prefix}最後 800'] = round(safe_float(last_match.get('第 2 段')) + safe_float(last_match.get('第 3 段')), 2)
             
         elif last_section >= 2:  # Only 2 sections available
-            df.at[index, '上次頭段完成時間'] = last_match.get('賽事時間1')
-            df.at[index, '上次頭段'] = round(safe_float(last_match.get('第 1 段')), 2)
-            df.at[index, '上次彎位 400'] = round(safe_float(last_match.get('第 1 段')), 2)
-            df.at[index, '上次最後 400'] = round(safe_float(last_match.get('第 2 段')), 2)
-            df.at[index, '上次最後 800'] = round(safe_float(last_match.get('第 1 段')) + safe_float(last_match.get('第 2 段')), 2)
+            df.at[index, f'{prefix}頭段完成時間'] = last_match.get('賽事時間1')
+            df.at[index, f'{prefix}頭段'] = round(safe_float(last_match.get('第 1 段')), 2)
+            df.at[index, f'{prefix}彎位 400'] = round(safe_float(last_match.get('第 1 段')), 2)
+            df.at[index, f'{prefix}最後 400'] = round(safe_float(last_match.get('第 2 段')), 2)
+            df.at[index, f'{prefix}最後 800'] = round(safe_float(last_match.get('第 1 段')) + safe_float(last_match.get('第 2 段')), 2)
             
         else:  # Only 1 section available
-            df.at[index, '上次頭段完成時間'] = None
-            df.at[index, '上次頭段'] = None
-            df.at[index, '上次彎位 400'] = None
-            df.at[index, '上次最後 400'] = round(safe_float(last_match.get('第 1 段')), 2)
-            df.at[index, '上次最後 800'] = None
+            df.at[index, f'{prefix}頭段完成時間'] = None
+            df.at[index, f'{prefix}頭段'] = None
+            df.at[index, f'{prefix}彎位 400'] = None
+            df.at[index, f'{prefix}最後 400'] = round(safe_float(last_match.get('第 1 段')), 2)
+            df.at[index, f'{prefix}最後 800'] = None
         
         # Set adjustment base (調整基數)
         try:
-            df.at[index, '上次調整基數'] = self._calculate_time_adjustment(df.loc[index])
+            df.at[index, f'{prefix}調整基數'] = self._calculate_time_adjustment(df.loc[index])
         except Exception:
-            df.at[index, '上次調整基數'] = 0
+            df.at[index, f'{prefix}調整基數'] = 0
     
-    def _calculate_adjusted_times(self, df: pd.DataFrame, index: int, row: pd.Series) -> None:
+    def _calculate_adjusted_times(self, df: pd.DataFrame, index: int, row: pd.Series, prefix: str) -> None:
         """Calculate time-adjusted performance metrics."""
-        finish_time_str = df.at[index, '上次完成時間']
+        finish_time_str = df.at[index, f'{prefix}完成時間']
         
         try:
             # Convert finish time to seconds
@@ -395,17 +410,17 @@ class HKJCRacecardDownloader:
             adjusted_seconds = finish_seconds + time_adjustment
             
             # Apply ground condition adjustment
-            if df.at[index, '上次泥草'] == '草地':
+            if df.at[index, f'{prefix}泥草'] == '草地':
                 adjusted_seconds = self._apply_ground_adjustment(
-                    adjusted_seconds, df.at[index, '上次場地狀況'], df.at[index, '上次馬場']
+                    adjusted_seconds, df.at[index, f'{prefix}場地狀況'], df.at[index, f'{prefix}馬場']
                 )
             
             # Store results
-            df.at[index, '上次調整後完成秒速'] = adjusted_seconds
-            df.at[index, '上次調整後完成時間'] = f"{int(adjusted_seconds // 60)}:{round(adjusted_seconds % 60, 2)}"
+            df.at[index, f'{prefix}調整後完成秒速'] = adjusted_seconds
+            df.at[index, f'{prefix}調整後完成時間'] = f"{int(adjusted_seconds // 60)}:{round(adjusted_seconds % 60, 2)}"
             
             # Calculate adjusted last 800m
-            df.at[index, '上次調整後最後 800'] = self._calculate_sectional_adjustments(df.loc[index])
+            df.at[index, f'{prefix}調整後最後 800'] = self._calculate_sectional_adjustments(df.loc[index])
             
         except (ValueError, IndexError) as e:
             logger.warning(f"Error processing finish time for index {index}: {e}")
@@ -473,11 +488,19 @@ class HKJCRacecardDownloader:
             '最佳時間', '上次賽事時間', '上次完成時間',
             '上次調整後完成時間', '上次調整後完成秒速', '上次頭段完成時間', '上次頭段',
             '上次彎位 400', '上次最後 400', '上次最後 800', '上次調整後最後 800',
+            '前次日期', '前次場次', '前次班次', '前次場地狀況',
+            '前次負磅', '前次負磅 +/-', '前次檔位', '前次檔位 +/-',
+            '前次賽事時間', '前次完成時間',
+            '前次調整後完成時間', '前次調整後完成秒速', '前次頭段完成時間', '前次頭段',
+            '前次彎位 400', '前次最後 400', '前次最後 800', '前次調整後最後 800',
             '網址'
         ]
         
         # Add missing columns that will be calculated
-        calculated_columns = ['上次完成時間 - 上次賽事時間', '賽事結果連結', '賽事重溫連結']
+        calculated_columns = [
+            '上次完成時間 - 上次賽事時間', '賽事結果連結', '賽事重溫連結',
+            '前次完成時間 - 前次賽事時間', '前次賽事結果連結', '前次賽事重溫連結'
+        ]
         
         # Create a copy of the DataFrame with only existing columns
         existing_columns = [col for col in required_columns if col in df.columns]
@@ -490,6 +513,7 @@ class HKJCRacecardDownloader:
         race_date_ts = pd.Timestamp(self.race_date)
         
         for index, row in df_terry.iterrows():
+            # Process Last Race (上次)
             if pd.notna(row.get('上次日期')):
                 last_date = pd.to_datetime(row['上次日期'])
                 df_terry.at[index, '上賽距今日數'] = (race_date_ts - last_date).days
@@ -526,7 +550,64 @@ class HKJCRacecardDownloader:
                         df_terry.at[index, '賽事重溫連結'] = f"https://racing.hkjc.com/racing/video/play.asp?type=replay-full&date={last_date.strftime('%Y%m%d')}&no={race_no:02d}&lang=chi"
                     except (ValueError, TypeError):
                         pass
-        
+
+            # Process Previous Race (前次)
+            if pd.notna(row.get('前次日期')):
+                prev_date = pd.to_datetime(row['前次日期'])
+                
+                # Calculate time difference
+                if pd.notna(row.get('前次完成時間')) and pd.notna(row.get('前次賽事時間')):
+                    try:
+                        finish_time_str = str(row['前次完成時間'])
+                        race_time_str = str(row['前次賽事時間'])
+                        
+                        # Parse finish time
+                        if ':' in finish_time_str:
+                            time_parts = finish_time_str.split(':')
+                            finish_time = int(time_parts[0]) * 60 + float(time_parts[1])
+                        else:
+                            finish_time = float(finish_time_str)
+                        
+                        # Parse race time based on distance
+                        if row.get('路程', 0) >= 1200 and ':' in race_time_str:
+                            time_parts = race_time_str.split(':')
+                            race_time = int(time_parts[0]) * 60 + float(time_parts[1])
+                        else:
+                            race_time = float(race_time_str) if race_time_str != 'nan' else 0
+                        
+                        df_terry.at[index, '前次完成時間 - 前次賽事時間'] = finish_time - race_time
+                    except (ValueError, IndexError, TypeError):
+                        df_terry.at[index, '前次完成時間 - 前次賽事時間'] = None
+                
+                # Add result and replay links
+                if pd.notna(row.get('前次場次')):
+                    try:
+                        race_no = int(row['前次場次'])
+                        df_terry.at[index, '前次賽事結果連結'] = f"https://racing.hkjc.com/racing/information/chinese/Racing/LocalResults.aspx?RaceDate={prev_date.strftime('%Y/%m/%d')}&RaceNo={race_no}"
+                        df_terry.at[index, '前次賽事重溫連結'] = f"https://racing.hkjc.com/racing/video/play.asp?type=replay-full&date={prev_date.strftime('%Y%m%d')}&no={race_no:02d}&lang=chi"
+                    except (ValueError, TypeError):
+                        pass
+            
+            # Process 兩次時間那一次較快
+            last_adjusted = row.get('上次調整後完成秒速')
+            prev_adjusted = row.get('前次調整後完成秒速')
+            if pd.notna(last_adjusted) and pd.notna(prev_adjusted):
+                df_terry.at[index, '較快調整後完成秒速'] = min(last_adjusted, prev_adjusted)
+            elif pd.notna(last_adjusted):
+                df_terry.at[index, '較快調整後完成秒速'] = last_adjusted
+            elif pd.notna(prev_adjusted):
+                df_terry.at[index, '較快調整後完成秒速'] = prev_adjusted
+
+            # Process 兩次最後800時間那一次較快
+            last_800 = row.get('上次調整後最後 800')
+            prev_800 = row.get('前次調整後最後 800')
+            if pd.notna(last_800) and pd.notna(prev_800):
+                df_terry.at[index, '較快調整後最後 800'] = min(last_800, prev_800)
+            elif pd.notna(last_800):
+                df_terry.at[index, '較快調整後最後 800'] = last_800
+            elif pd.notna(prev_800):
+                df_terry.at[index, '較快調整後最後 800'] = prev_800
+
         return df_terry
     
     def _create_alfred_sheet(self, df: pd.DataFrame) -> pd.DataFrame:
@@ -695,7 +776,7 @@ class HKJCRacecardDownloader:
     
 def main():
     # Configuration
-    race_date = date(2025, 12, 20)
+    race_date = date(2026, 2, 22)
     race_course = "ST"  # ST / HV
     
     # Create downloader and process
