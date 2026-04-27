@@ -6,6 +6,8 @@ import numpy as np
 import logging
 from typing import Dict, List, Optional, Tuple
 from pathlib import Path
+from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
+from horse_racing_analysis import RacingAnalyzer
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -17,7 +19,74 @@ class HKJCRacecardDownloader:
         self.race_course = race_course
         self.base_url = "https://racing.hkjc.com/racing/information/Chinese/Racing"
         self.df_results = self._load_historical_data()
+        # Initialize racing analyzer with historical data
+        self.analyzer = RacingAnalyzer(self.df_results)
         
+    def _parse_time_string(self, time_str: str) -> Optional[float]:
+        """Unified time string parsing - converts time string to seconds.
+        
+        Args:
+            time_str: Time string in format 'MM:SS.ms' or 'SS.ms' or float
+            
+        Returns:
+            Float representing seconds, or None if parsing fails
+        """
+        if pd.isna(time_str) or time_str == '' or time_str == '---':
+            return None
+        
+        try:
+            time_str = str(time_str).strip()
+            if ':' in time_str:
+                # Format: MM:SS.ms
+                parts = time_str.split(':')
+                minutes = int(parts[0])
+                seconds = float(parts[1])
+                return minutes * 60 + seconds
+            else:
+                # Format: SS.ms or just float
+                return float(time_str)
+        except (ValueError, IndexError, AttributeError, TypeError):
+            logger.debug(f"Failed to parse time string: {time_str}")
+            return None
+    
+    def _get_race_count(self) -> int:
+        """Dynamically detect the number of races for the configured date and course.
+        
+        Returns:
+            Integer representing the total number of races, defaults to 11 if detection fails
+        """
+        try:
+            url = f"https://racing.hkjc.com/racing/information/Chinese/Racing/RaceFixture.aspx?RaceDate={self.race_date.strftime('%Y/%m/%d')}&Racecourse={self.race_course}"
+            response = requests.get(url, timeout=10)
+            response.raise_for_status()
+            
+            soup = BeautifulSoup(response.text, 'html.parser')
+            
+            # Find the race number dropdown/select options
+            race_selectors = soup.find_all('option')
+            race_numbers = []
+            
+            for option in race_selectors:
+                try:
+                    # Try to extract race number from option value
+                    value = option.get('value', '')
+                    if value and value.isdigit():
+                        race_numbers.append(int(value))
+                except (ValueError, TypeError):
+                    continue
+            
+            if race_numbers:
+                max_race = max(race_numbers)
+                logger.info(f"Detected {max_race} races for {self.race_date} at {self.race_course}")
+                return max_race
+            else:
+                logger.warning(f"Could not detect race count, defaulting to 11")
+                return 11
+                
+        except Exception as e:
+            logger.warning(f"Error detecting race count: {e}, defaulting to 11")
+            return 11
+    
     def _load_historical_data(self) -> pd.DataFrame:
         """Load historical race results."""
         try:
@@ -482,9 +551,10 @@ class HKJCRacecardDownloader:
         """Create Terry AI formatted sheet."""
         # First, ensure all required columns exist in the DataFrame
         required_columns = [
-            '場次', '班次', '路程', '馬匹編號', '馬名', '騎師', '練馬師', '評分',
+            '場次', '班次', '路程', '馬匹編號', '馬名', '騎師', '練馬師', '評分', '6次近績',
+            '烙號', '泥草', '負磅', '排位體重', '排位體重+/-',
             '上次日期', '上賽距今日數', '上次場次', '上次班次', '上次場地狀況',
-            '負磅', '上次負磅', '上次負磅 +/-', '檔位', '上次檔位', '上次檔位 +/-',
+            '上次負磅', '上次負磅 +/-', '檔位', '上次檔位', '上次檔位 +/-',
             '最佳時間', '上次賽事時間', '上次完成時間',
             '上次調整後完成時間', '上次調整後完成秒速', '上次頭段完成時間', '上次頭段',
             '上次彎位 400', '上次最後 400', '上次最後 800', '上次調整後最後 800',
@@ -499,14 +569,18 @@ class HKJCRacecardDownloader:
         # Add missing columns that will be calculated
         calculated_columns = [
             '上次完成時間 - 上次賽事時間', '賽事結果連結', '賽事重溫連結',
-            '前次完成時間 - 前次賽事時間', '前次賽事結果連結', '前次賽事重溫連結'
+            '前次完成時間 - 前次賽事時間', '前次賽事結果連結', '前次賽事重溫連結',
+            '勝率(%)', '騎師因子', '一致性評分', '綜合評分', '評估',
+            '騎練合作往績因子', '體重變化(磅)', '體重狀態警示', '負磅百分比(%)',
+            '步速預測', '近3仗頭段均速', '特徵修正勝率(%)',
+            '較快調整後完成秒速', '較快調整後最後 800', '預測得分', '預測排名'
         ]
         
         # Create a copy of the DataFrame with only existing columns
         existing_columns = [col for col in required_columns if col in df.columns]
         df_terry = df[existing_columns].copy()
-        if '上賽距今日數' in df_terry.columns:
-            df_terry['上賽距今日數'] = df_terry['上賽距今日數'].astype('object')
+        # Convert all columns to object dtype to allow flexible type assignment
+        df_terry = df_terry.astype('object')
         
         # Add calculated columns
         for col in calculated_columns:
@@ -515,6 +589,163 @@ class HKJCRacecardDownloader:
         race_date_ts = pd.Timestamp(self.race_date)
         
         for index, row in df_terry.iterrows():
+            # ========== 計算勝率、騎師因子等投注指標 ==========
+            # Get field size (count of horses in the race)
+            field_size = len([r for r in df_terry['馬匹編號'] if pd.notna(r)])
+            field_size = max(field_size, 3)  # Minimum 3 horses
+
+            rating = row.get('評分')
+            jockey = row.get('騎師')
+            trainer = row.get('練馬師')
+            form_6 = row.get('6次近績')
+
+            # Feature 1: Trainer-Jockey combo factor
+            combo_factor = 1.0
+            if pd.notna(trainer) and trainer != '' and pd.notna(jockey) and jockey != '':
+                try:
+                    combo_factor = self.analyzer.get_trainer_jockey_combo_factor(str(trainer), str(jockey))
+                    df_terry.at[index, '騎練合作往績因子'] = round(combo_factor, 2)
+                except Exception as e:
+                    logger.debug(f"Error getting trainer-jockey combo factor: {e}")
+
+            # Feature 2: Body weight change warning
+            weight_change = row.get('排位體重+/-')
+            if pd.notna(weight_change):
+                try:
+                    weight_change_val = float(weight_change)
+                    df_terry.at[index, '體重變化(磅)'] = round(weight_change_val, 1)
+                    if abs(weight_change_val) >= 20:
+                        df_terry.at[index, '體重狀態警示'] = 'WARNING (>=20lb)'
+                    else:
+                        df_terry.at[index, '體重狀態警示'] = 'OK'
+                except (TypeError, ValueError):
+                    pass
+
+            # Feature 3: Load ratio (assigned weight / body weight)
+            assigned_weight = row.get('負磅')
+            body_weight = row.get('排位體重')
+            load_ratio_pct = None
+            if pd.notna(assigned_weight) and pd.notna(body_weight):
+                try:
+                    body_weight_val = float(body_weight)
+                    if body_weight_val > 0:
+                        load_ratio_pct = float(assigned_weight) / body_weight_val * 100.0
+                        df_terry.at[index, '負磅百分比(%)'] = round(load_ratio_pct, 2)
+                except (TypeError, ValueError, ZeroDivisionError):
+                    pass
+
+            # Feature 4: Pace mapping from recent head-section times
+            pace_times = []
+            for t_col in ['上次頭段完成時間', '前次頭段完成時間']:
+                parsed_time = self._parse_time_string(row.get(t_col))
+                if parsed_time is not None:
+                    pace_times.append(parsed_time)
+
+            cloth_no = row.get('烙號')
+            if len(pace_times) < 3 and pd.notna(cloth_no):
+                try:
+                    historical_pace = self.analyzer.get_recent_head_section_times(
+                        cloth_no=str(cloth_no),
+                        venue=self.race_course,
+                        surface=str(row.get('泥草')) if pd.notna(row.get('泥草')) else None,
+                        distance=int(row.get('路程')) if pd.notna(row.get('路程')) else None,
+                        limit=3
+                    )
+                    for p in historical_pace:
+                        if len(pace_times) >= 3:
+                            break
+                        pace_times.append(float(p))
+                except Exception as e:
+                    logger.debug(f"Error building pace mapping data: {e}")
+
+            if pace_times:
+                pace_style = self.analyzer.classify_pace_style(pace_times)
+                df_terry.at[index, '步速預測'] = pace_style
+                df_terry.at[index, '近3仗頭段均速'] = round(float(np.mean(pace_times[:3])), 2)
+            
+            # Calculate base win probability
+            if pd.notna(rating) and isinstance(rating, (int, float)):
+                try:
+                    win_prob = self.analyzer.calculate_win_probability(
+                        int(rating), 
+                        str(row.get('班次', '')), 
+                        field_size
+                    )
+                    df_terry.at[index, '勝率(%)'] = round(win_prob * 100, 1)
+                except Exception as e:
+                    logger.debug(f"Error calculating win probability: {e}")
+            
+            # Get jockey factor
+            if pd.notna(jockey) and jockey != '':
+                try:
+                    jockey_factor = self.analyzer.get_jockey_factor(str(jockey))
+                    df_terry.at[index, '騎師因子'] = round(jockey_factor, 2)
+                except Exception as e:
+                    logger.debug(f"Error getting jockey factor: {e}")
+
+            # Calculate feature-adjusted win probability
+            if pd.notna(rating) and isinstance(rating, (int, float)):
+                try:
+                    base_prob = self.analyzer.calculate_win_probability(
+                        int(rating),
+                        str(row.get('班次', '')),
+                        field_size
+                    )
+                    pace_style = df_terry.at[index, '步速預測']
+                    pace_multiplier_map = {
+                        'Front-runner': 1.08,
+                        'Prominent': 1.03,
+                        'Closer': 0.97,
+                        'Unknown': 1.00
+                    }
+                    pace_multiplier = pace_multiplier_map.get(pace_style, 1.00)
+
+                    weight_multiplier = 1.00
+                    if pd.notna(weight_change):
+                        try:
+                            if abs(float(weight_change)) >= 20:
+                                weight_multiplier = 0.88
+                        except (TypeError, ValueError):
+                            pass
+
+                    load_multiplier = 1.00
+                    if load_ratio_pct is not None:
+                        if load_ratio_pct >= 11.5:
+                            load_multiplier = 0.95
+                        elif load_ratio_pct <= 10.0:
+                            load_multiplier = 1.03
+
+                    adjusted_prob = base_prob * combo_factor * pace_multiplier * weight_multiplier * load_multiplier
+                    adjusted_prob = max(0.0, min(0.95, adjusted_prob))
+                    df_terry.at[index, '特徵修正勝率(%)'] = round(adjusted_prob * 100.0, 1)
+                except Exception as e:
+                    logger.debug(f"Error calculating feature-adjusted win probability: {e}")
+            
+            # Calculate consistency score from recent form
+            if pd.notna(form_6) and form_6 != '':
+                try:
+                    consistency_score, _ = self.analyzer.calculate_consistency_score(str(form_6))
+                    df_terry.at[index, '一致性評分'] = round(consistency_score, 1)
+                except Exception as e:
+                    logger.debug(f"Error calculating consistency score: {e}")
+            
+            # Calculate composite score
+            if pd.notna(rating) and pd.notna(jockey) and pd.notna(form_6):
+                try:
+                    composite = self.analyzer.calculate_composite_score(
+                        int(rating),
+                        str(jockey),
+                        str(form_6),
+                        str(row.get('班次', '')),
+                        field_size
+                    )
+                    if composite:
+                        df_terry.at[index, '綜合評分'] = round(composite.get('綜合評分', 0), 1)
+                        df_terry.at[index, '評估'] = composite.get('評估', '')
+                except Exception as e:
+                    logger.debug(f"Error calculating composite score: {e}")
+            
+            # ========== 原有的時間計算邏輯 ==========
             # Process Last Race (上次)
             if pd.notna(row.get('上次日期')):
                 last_date = pd.to_datetime(row['上次日期'])
@@ -522,26 +753,12 @@ class HKJCRacecardDownloader:
                 
                 # Calculate time difference
                 if pd.notna(row.get('上次完成時間')) and pd.notna(row.get('上次賽事時間')):
-                    try:
-                        finish_time_str = str(row['上次完成時間'])
-                        race_time_str = str(row['上次賽事時間'])
-                        
-                        # Parse finish time
-                        if ':' in finish_time_str:
-                            time_parts = finish_time_str.split(':')
-                            finish_time = int(time_parts[0]) * 60 + float(time_parts[1])
-                        else:
-                            finish_time = float(finish_time_str)
-                        
-                        # Parse race time based on distance
-                        if row.get('路程', 0) >= 1200 and ':' in race_time_str:
-                            time_parts = race_time_str.split(':')
-                            race_time = int(time_parts[0]) * 60 + float(time_parts[1])
-                        else:
-                            race_time = float(race_time_str) if race_time_str != 'nan' else 0
-                        
+                    finish_time = self._parse_time_string(row['上次完成時間'])
+                    race_time = self._parse_time_string(row['上次賽事時間'])
+                    
+                    if finish_time is not None and race_time is not None:
                         df_terry.at[index, '上次完成時間 - 上次賽事時間'] = finish_time - race_time
-                    except (ValueError, IndexError, TypeError):
+                    else:
                         df_terry.at[index, '上次完成時間 - 上次賽事時間'] = None
                 
                 # Add result and replay links
@@ -559,26 +776,12 @@ class HKJCRacecardDownloader:
                 
                 # Calculate time difference
                 if pd.notna(row.get('前次完成時間')) and pd.notna(row.get('前次賽事時間')):
-                    try:
-                        finish_time_str = str(row['前次完成時間'])
-                        race_time_str = str(row['前次賽事時間'])
-                        
-                        # Parse finish time
-                        if ':' in finish_time_str:
-                            time_parts = finish_time_str.split(':')
-                            finish_time = int(time_parts[0]) * 60 + float(time_parts[1])
-                        else:
-                            finish_time = float(finish_time_str)
-                        
-                        # Parse race time based on distance
-                        if row.get('路程', 0) >= 1200 and ':' in race_time_str:
-                            time_parts = race_time_str.split(':')
-                            race_time = int(time_parts[0]) * 60 + float(time_parts[1])
-                        else:
-                            race_time = float(race_time_str) if race_time_str != 'nan' else 0
-                        
+                    finish_time = self._parse_time_string(row['前次完成時間'])
+                    race_time = self._parse_time_string(row['前次賽事時間'])
+                    
+                    if finish_time is not None and race_time is not None:
                         df_terry.at[index, '前次完成時間 - 前次賽事時間'] = finish_time - race_time
-                    except (ValueError, IndexError, TypeError):
+                    else:
                         df_terry.at[index, '前次完成時間 - 前次賽事時間'] = None
                 
                 # Add result and replay links
@@ -615,21 +818,26 @@ class HKJCRacecardDownloader:
     def _create_alfred_sheet(self, df: pd.DataFrame) -> pd.DataFrame:
         """Create Alfred AI formatted sheet."""
         required_columns = [
-            '場次', '班次', '路程', '馬匹編號', '馬名', '騎師', '評分',
+            '場次', '班次', '路程', '馬匹編號', '馬名', '騎師', '練馬師', '評分',
+            '烙號', '泥草', '負磅', '排位體重', '排位體重+/-',
             '上次日期', '上賽距今日數', '上次班次', '上次場地狀況',
-            '負磅', '上次負磅', '上次負磅 +/-', '檔位', '上次檔位', '上次檔位 +/-',
+            '上次負磅', '上次負磅 +/-', '檔位', '上次檔位', '上次檔位 +/-',
             '最佳時間', '上次完成時間', '上次頭段完成時間', '上次彎位 400',
-            '上次最後 400', '上次最後 800', '網址', '上次場次'
+            '上次最後 400', '上次最後 800', '前次頭段完成時間', '網址', '上次場次'
         ]
         
         # Add missing columns that will be calculated
-        calculated_columns = ['賽事結果連結', '賽事重溫連結']
+        calculated_columns = [
+            '賽事結果連結', '賽事重溫連結', '勝率(%)', '騎師因子',
+            '騎練合作往績因子', '體重變化(磅)', '體重狀態警示', '負磅百分比(%)',
+            '步速預測', '近3仗頭段均速', '特徵修正勝率(%)', '預測得分', '預測排名'
+        ]
         
         # Create a copy of the DataFrame with only existing columns
         existing_columns = [col for col in required_columns if col in df.columns]
         df_alfred = df[existing_columns].copy()
-        if '上賽距今日數' in df_alfred.columns:
-            df_alfred['上賽距今日數'] = df_alfred['上賽距今日數'].astype('object')
+        # Convert all columns to object dtype to allow flexible type assignment
+        df_alfred = df_alfred.astype('object')
         
         # Add calculated columns
         for col in calculated_columns:
@@ -638,6 +846,129 @@ class HKJCRacecardDownloader:
         race_date_ts = pd.Timestamp(self.race_date)
         
         for index, row in df_alfred.iterrows():
+            # ========== 計算勝率、騎師因子等投注指標 ==========
+            field_size = len([r for r in df_alfred['馬匹編號'] if pd.notna(r)])
+            field_size = max(field_size, 3)
+
+            rating = row.get('評分')
+            jockey = row.get('騎師')
+            trainer = row.get('練馬師')
+
+            combo_factor = 1.0
+            if pd.notna(trainer) and trainer != '' and pd.notna(jockey) and jockey != '':
+                try:
+                    combo_factor = self.analyzer.get_trainer_jockey_combo_factor(str(trainer), str(jockey))
+                    df_alfred.at[index, '騎練合作往績因子'] = round(combo_factor, 2)
+                except Exception as e:
+                    logger.debug(f"Error getting trainer-jockey combo factor: {e}")
+
+            weight_change = row.get('排位體重+/-')
+            if pd.notna(weight_change):
+                try:
+                    weight_change_val = float(weight_change)
+                    df_alfred.at[index, '體重變化(磅)'] = round(weight_change_val, 1)
+                    df_alfred.at[index, '體重狀態警示'] = 'WARNING (>=20lb)' if abs(weight_change_val) >= 20 else 'OK'
+                except (TypeError, ValueError):
+                    pass
+
+            assigned_weight = row.get('負磅')
+            body_weight = row.get('排位體重')
+            load_ratio_pct = None
+            if pd.notna(assigned_weight) and pd.notna(body_weight):
+                try:
+                    body_weight_val = float(body_weight)
+                    if body_weight_val > 0:
+                        load_ratio_pct = float(assigned_weight) / body_weight_val * 100.0
+                        df_alfred.at[index, '負磅百分比(%)'] = round(load_ratio_pct, 2)
+                except (TypeError, ValueError, ZeroDivisionError):
+                    pass
+
+            pace_times = []
+            for t_col in ['上次頭段完成時間', '前次頭段完成時間']:
+                parsed_time = self._parse_time_string(row.get(t_col))
+                if parsed_time is not None:
+                    pace_times.append(parsed_time)
+
+            cloth_no = row.get('烙號')
+            if len(pace_times) < 3 and pd.notna(cloth_no):
+                try:
+                    historical_pace = self.analyzer.get_recent_head_section_times(
+                        cloth_no=str(cloth_no),
+                        venue=self.race_course,
+                        surface=str(row.get('泥草')) if pd.notna(row.get('泥草')) else None,
+                        distance=int(row.get('路程')) if pd.notna(row.get('路程')) else None,
+                        limit=3
+                    )
+                    for p in historical_pace:
+                        if len(pace_times) >= 3:
+                            break
+                        pace_times.append(float(p))
+                except Exception as e:
+                    logger.debug(f"Error building pace mapping data: {e}")
+
+            if pace_times:
+                pace_style = self.analyzer.classify_pace_style(pace_times)
+                df_alfred.at[index, '步速預測'] = pace_style
+                df_alfred.at[index, '近3仗頭段均速'] = round(float(np.mean(pace_times[:3])), 2)
+            
+            # Calculate win probability
+            if pd.notna(rating) and isinstance(rating, (int, float)):
+                try:
+                    win_prob = self.analyzer.calculate_win_probability(
+                        int(rating), 
+                        str(row.get('班次', '')), 
+                        field_size
+                    )
+                    df_alfred.at[index, '勝率(%)'] = round(win_prob * 100, 1)
+                except Exception as e:
+                    logger.debug(f"Error calculating win probability: {e}")
+            
+            # Get jockey factor
+            if pd.notna(jockey) and jockey != '':
+                try:
+                    jockey_factor = self.analyzer.get_jockey_factor(str(jockey))
+                    df_alfred.at[index, '騎師因子'] = round(jockey_factor, 2)
+                except Exception as e:
+                    logger.debug(f"Error getting jockey factor: {e}")
+
+            if pd.notna(rating) and isinstance(rating, (int, float)):
+                try:
+                    base_prob = self.analyzer.calculate_win_probability(
+                        int(rating),
+                        str(row.get('班次', '')),
+                        field_size
+                    )
+                    pace_style = df_alfred.at[index, '步速預測']
+                    pace_multiplier_map = {
+                        'Front-runner': 1.08,
+                        'Prominent': 1.03,
+                        'Closer': 0.97,
+                        'Unknown': 1.00
+                    }
+                    pace_multiplier = pace_multiplier_map.get(pace_style, 1.00)
+
+                    weight_multiplier = 1.00
+                    if pd.notna(weight_change):
+                        try:
+                            if abs(float(weight_change)) >= 20:
+                                weight_multiplier = 0.88
+                        except (TypeError, ValueError):
+                            pass
+
+                    load_multiplier = 1.00
+                    if load_ratio_pct is not None:
+                        if load_ratio_pct >= 11.5:
+                            load_multiplier = 0.95
+                        elif load_ratio_pct <= 10.0:
+                            load_multiplier = 1.03
+
+                    adjusted_prob = base_prob * combo_factor * pace_multiplier * weight_multiplier * load_multiplier
+                    adjusted_prob = max(0.0, min(0.95, adjusted_prob))
+                    df_alfred.at[index, '特徵修正勝率(%)'] = round(adjusted_prob * 100.0, 1)
+                except Exception as e:
+                    logger.debug(f"Error calculating feature-adjusted win probability: {e}")
+            
+            # ========== 原有的邏輯 ==========
             if pd.notna(row.get('上次日期')):
                 last_date = pd.to_datetime(row['上次日期'])
                 df_alfred.at[index, '上賽距今日數'] = (race_date_ts - last_date).days
@@ -652,22 +983,225 @@ class HKJCRacecardDownloader:
                         pass
         
         return df_alfred
+
+    def _apply_prediction_ranking(self, df: pd.DataFrame) -> pd.DataFrame:
+        """Combine all available analysis metrics into a race-level prediction score."""
+        if df.empty:
+            return df
+
+        df_ranked = df.copy()
+        metric_configs = {
+            '特徵修正勝率(%)': {'weight': 0.32, 'ascending': True},
+            '勝率(%)': {'weight': 0.18, 'ascending': True},
+            '綜合評分': {'weight': 0.18, 'ascending': True},
+            '一致性評分': {'weight': 0.10, 'ascending': True},
+            '騎師因子': {'weight': 0.05, 'ascending': True},
+            '騎練合作往績因子': {'weight': 0.05, 'ascending': True},
+            '較快調整後完成秒速': {'weight': 0.12, 'ascending': False},
+        }
+
+        score_series = pd.Series(0.0, index=df_ranked.index, dtype='float64')
+        total_weight = 0.0
+
+        for metric, config in metric_configs.items():
+            if metric not in df_ranked.columns:
+                continue
+
+            metric_values = pd.to_numeric(df_ranked[metric], errors='coerce')
+            valid_mask = metric_values.notna()
+            if valid_mask.sum() == 0:
+                continue
+
+            rank_pct = metric_values.rank(
+                method='average',
+                pct=True,
+                ascending=config['ascending']
+            ) * 100.0
+            score_series.loc[valid_mask] += rank_pct.loc[valid_mask] * config['weight']
+            total_weight += config['weight']
+
+        if total_weight == 0:
+            df_ranked['預測得分'] = None
+            df_ranked['預測排名'] = None
+            return df_ranked
+
+        score_series = score_series / total_weight
+        df_ranked['預測得分'] = score_series.round(1)
+        df_ranked['預測排名'] = score_series.rank(method='min', ascending=False).astype('Int64')
+        return df_ranked
+
+    def _build_predictions_sheet(self, terry_sheets: Dict[int, pd.DataFrame]) -> pd.DataFrame:
+        """Build a summary sheet of the top 2 predicted horses for each race."""
+        prediction_rows = []
+
+        for race_no in sorted(terry_sheets.keys()):
+            df_race = terry_sheets[race_no]
+            if df_race.empty or '預測排名' not in df_race.columns:
+                continue
+
+            ranked = df_race.copy()
+            ranked['預測排名'] = pd.to_numeric(ranked['預測排名'], errors='coerce')
+            ranked = ranked[ranked['預測排名'].notna()].sort_values(['預測排名', '預測得分'], ascending=[True, False]).head(2)
+
+            for _, row in ranked.iterrows():
+                prediction_rows.append({
+                    '場次': race_no,
+                    '預測名次': int(row.get('預測排名')) if pd.notna(row.get('預測排名')) else None,
+                    '馬匹編號': row.get('馬匹編號'),
+                    '馬名': row.get('馬名'),
+                    '騎師': row.get('騎師'),
+                    '練馬師': row.get('練馬師'),
+                    '預測得分': row.get('預測得分'),
+                    '較快調整後完成秒速': row.get('較快調整後完成秒速'),
+                    '特徵修正勝率(%)': row.get('特徵修正勝率(%)'),
+                    '綜合評分': row.get('綜合評分'),
+                    '一致性評分': row.get('一致性評分'),
+                    '騎師因子': row.get('騎師因子'),
+                    '騎練合作往績因子': row.get('騎練合作往績因子'),
+                    '評估': row.get('評估'),
+                })
+
+        return pd.DataFrame(prediction_rows)
+
+    def _build_predictions_grid_sheet(self, terry_sheets: Dict[int, pd.DataFrame], top_n: int = 4) -> pd.DataFrame:
+        """Build image-style predictions layout: one race per row, horses spread horizontally."""
+        grid_rows = []
+
+        for race_no in range(1, max(terry_sheets.keys(), default=0) + 1):
+            df_race = terry_sheets.get(race_no)
+            row_data = {'場次': race_no}
+
+            if df_race is not None and not df_race.empty and '預測排名' in df_race.columns:
+                ranked = df_race.copy()
+                ranked['預測排名'] = pd.to_numeric(ranked['預測排名'], errors='coerce')
+                ranked = ranked[ranked['預測排名'].notna()].sort_values(['預測排名', '預測得分'], ascending=[True, False]).head(top_n)
+
+                for slot, (_, horse_row) in enumerate(ranked.iterrows(), start=1):
+                    row_data[f'號碼{slot}'] = horse_row.get('馬匹編號')
+                    row_data[f'馬名{slot}'] = horse_row.get('馬名')
+
+            for slot in range(1, top_n + 1):
+                row_data.setdefault(f'號碼{slot}', None)
+                row_data.setdefault(f'馬名{slot}', None)
+
+            grid_rows.append(row_data)
+
+        columns = ['場次']
+        for slot in range(1, top_n + 1):
+            columns.extend([f'號碼{slot}', f'馬名{slot}'])
+
+        return pd.DataFrame(grid_rows, columns=columns)
+
+    def _format_predictions_grid_sheet(self, worksheet, top_n: int = 4) -> None:
+        """Format predictions sheet to resemble the provided image."""
+        gray_fill = PatternFill(fill_type='solid', fgColor='E7E6E6')
+        gold_fill = PatternFill(fill_type='solid', fgColor='FFC000')
+        white_fill = PatternFill(fill_type='solid', fgColor='FFFFFF')
+        thin_gray = Side(style='thin', color='BFBFBF')
+        border = Border(left=thin_gray, right=thin_gray, top=thin_gray, bottom=thin_gray)
+        center = Alignment(horizontal='center', vertical='center')
+        left = Alignment(horizontal='left', vertical='center')
+        font = Font(name='PMingLiU', size=16)
+
+        worksheet.freeze_panes = 'A1'
+        worksheet.sheet_view.showGridLines = False
+
+        for col_idx in range(1, 2 + top_n * 2):
+            col_letter = worksheet.cell(row=1, column=col_idx).column_letter
+            if col_idx == 1:
+                worksheet.column_dimensions[col_letter].width = 8
+            elif col_idx % 2 == 0:
+                worksheet.column_dimensions[col_letter].width = 8
+            else:
+                worksheet.column_dimensions[col_letter].width = 16
+
+        for row in worksheet.iter_rows():
+            for cell in row:
+                cell.border = border
+                cell.font = font
+                if cell.column == 1:
+                    cell.fill = gray_fill
+                    cell.alignment = center
+                elif cell.column % 2 == 0:
+                    cell.fill = gold_fill
+                    cell.alignment = center
+                else:
+                    cell.fill = white_fill
+                    cell.alignment = left
+
+        for row_idx in range(1, worksheet.max_row + 1):
+            worksheet.row_dimensions[row_idx].height = 26
+
+    def _copy_prediction_columns_to_alfred(self, df_alfred: pd.DataFrame, df_terry: pd.DataFrame) -> pd.DataFrame:
+        """Copy prediction outputs from Terry sheet into Alfred sheet for consistency."""
+        if df_alfred.empty or df_terry.empty:
+            return df_alfred
+
+        merge_columns = ['馬匹編號', '預測得分', '預測排名', '綜合評分', '一致性評分', '評估', '較快調整後完成秒速']
+        available_merge_columns = [col for col in merge_columns if col in df_terry.columns]
+        if '馬匹編號' not in available_merge_columns:
+            return df_alfred
+
+        terry_subset = df_terry[available_merge_columns].copy()
+        df_merged = df_alfred.merge(terry_subset, on='馬匹編號', how='left', suffixes=('', '_terry'))
+
+        for col in ['預測得分', '預測排名', '綜合評分', '一致性評分', '評估', '較快調整後完成秒速']:
+            terry_col = f'{col}_terry'
+            if terry_col in df_merged.columns:
+                df_merged[col] = df_merged[terry_col]
+                df_merged = df_merged.drop(columns=[terry_col])
+
+        return df_merged
     
-    def _create_combined_files(self, date_str: str) -> None:
-        """Create combined Excel files for different formats."""
+    def _create_combined_files(self, date_str: str, race_count: int) -> None:
+        """Create combined Excel files for different formats.
+        
+        Args:
+            date_str: Date string in format YYYYMMDD
+            race_count: Total number of races to process
+        """
+        race_data = {}
+        terry_sheets = {}
+        alfred_sheets = {}
+
+        for race_no in range(1, race_count + 1):
+            try:
+                df = pd.read_excel(f"Racecard_{date_str}_{race_no}.xlsx")
+                if df.empty:
+                    continue
+                race_data[race_no] = df
+
+                df_terry = self._create_terry_sheet(df)
+                if not df_terry.empty:
+                    terry_sheets[race_no] = self._apply_prediction_ranking(df_terry)
+
+                df_alfred = self._create_alfred_sheet(df)
+                if not df_alfred.empty:
+                    if race_no in terry_sheets:
+                        df_alfred = self._copy_prediction_columns_to_alfred(df_alfred, terry_sheets[race_no])
+                    alfred_sheets[race_no] = df_alfred
+            except FileNotFoundError:
+                logger.warning(f"File Racecard_{date_str}_{race_no}.xlsx not found")
+            except Exception as e:
+                logger.error(f"Error preparing combined data for Race {race_no}: {e}")
+
+        predictions_df = self._build_predictions_sheet(terry_sheets)
+        predictions_grid_df = self._build_predictions_grid_sheet(terry_sheets, top_n=4)
+
         # Standard combined file
         standard_sheets_created = 0
         with pd.ExcelWriter(f"Racecard_{date_str}.xlsx", engine='openpyxl') as writer:
-            for race_no in range(1, 12):
-                try:
-                    df = pd.read_excel(f"Racecard_{date_str}_{race_no}.xlsx")
-                    if not df.empty:
-                        df.to_excel(writer, sheet_name=f"Race_{race_no}", index=False)
-                        standard_sheets_created += 1
-                except FileNotFoundError:
-                    logger.warning(f"File Racecard_{date_str}_{race_no}.xlsx not found")
-                except Exception as e:
-                    logger.error(f"Error adding Race {race_no} to standard file: {e}")
+            for race_no in range(1, race_count + 1):
+                df = race_data.get(race_no)
+                if df is not None and not df.empty:
+                    df.to_excel(writer, sheet_name=f"Race_{race_no}", index=False)
+                    standard_sheets_created += 1
+
+            if not predictions_grid_df.empty:
+                predictions_grid_df.to_excel(writer, sheet_name="Predictions", index=False, header=False)
+                self._format_predictions_grid_sheet(writer.sheets['Predictions'], top_n=4)
+            if not predictions_df.empty:
+                predictions_df.to_excel(writer, sheet_name="Predictions_Detail", index=False)
         
         if standard_sheets_created == 0:
             logger.warning(f"No sheets created for standard file Racecard_{date_str}.xlsx")
@@ -675,18 +1209,17 @@ class HKJCRacecardDownloader:
         # Terry format
         terry_sheets_created = 0
         with pd.ExcelWriter(f"Racecard_{date_str}_Terry.xlsx", engine='openpyxl') as writer:
-            for race_no in range(1, 12):
-                try:
-                    df = pd.read_excel(f"Racecard_{date_str}_{race_no}.xlsx")
-                    if not df.empty:
-                        df_terry = self._create_terry_sheet(df)
-                        if not df_terry.empty:
-                            df_terry.to_excel(writer, sheet_name=f"Race_{race_no}", index=False)
-                            terry_sheets_created += 1
-                except FileNotFoundError:
-                    logger.warning(f"File Racecard_{date_str}_{race_no}.xlsx not found for Terry format")
-                except Exception as e:
-                    logger.error(f"Error creating Terry sheet for Race {race_no}: {e}")
+            for race_no in range(1, race_count + 1):
+                df_terry = terry_sheets.get(race_no)
+                if df_terry is not None and not df_terry.empty:
+                    df_terry.to_excel(writer, sheet_name=f"Race_{race_no}", index=False)
+                    terry_sheets_created += 1
+
+            if not predictions_grid_df.empty:
+                predictions_grid_df.to_excel(writer, sheet_name="Predictions", index=False, header=False)
+                self._format_predictions_grid_sheet(writer.sheets['Predictions'], top_n=4)
+            if not predictions_df.empty:
+                predictions_df.to_excel(writer, sheet_name="Predictions_Detail", index=False)
             
             # Create a dummy sheet if no sheets were created
             if terry_sheets_created == 0:
@@ -697,18 +1230,17 @@ class HKJCRacecardDownloader:
         # Alfred format
         alfred_sheets_created = 0
         with pd.ExcelWriter(f"Racecard_{date_str}_Alfred.xlsx", engine='openpyxl') as writer:
-            for race_no in range(1, 12):
-                try:
-                    df = pd.read_excel(f"Racecard_{date_str}_{race_no}.xlsx")
-                    if not df.empty:
-                        df_alfred = self._create_alfred_sheet(df)
-                        if not df_alfred.empty:
-                            df_alfred.to_excel(writer, sheet_name=f"Alfred_{race_no}", index=False)
-                            alfred_sheets_created += 1
-                except FileNotFoundError:
-                    logger.warning(f"File Racecard_{date_str}_{race_no}.xlsx not found for Alfred format")
-                except Exception as e:
-                    logger.error(f"Error creating Alfred sheet for Race {race_no}: {e}")
+            for race_no in range(1, race_count + 1):
+                df_alfred = alfred_sheets.get(race_no)
+                if df_alfred is not None and not df_alfred.empty:
+                    df_alfred.to_excel(writer, sheet_name=f"Alfred_{race_no}", index=False)
+                    alfred_sheets_created += 1
+
+            if not predictions_grid_df.empty:
+                predictions_grid_df.to_excel(writer, sheet_name="Predictions", index=False, header=False)
+                self._format_predictions_grid_sheet(writer.sheets['Predictions'], top_n=4)
+            if not predictions_df.empty:
+                predictions_df.to_excel(writer, sheet_name="Predictions_Detail", index=False)
             
             # Create a dummy sheet if no sheets were created
             if alfred_sheets_created == 0:
@@ -723,11 +1255,15 @@ class HKJCRacecardDownloader:
         date_str = self.race_date.strftime('%Y%m%d')
         logger.info(f"Starting racecard download for {self.race_date} at {self.race_course}")
         
+        # Dynamically detect the number of races
+        race_count = self._get_race_count()
+        logger.info(f"Processing {race_count} races for {self.race_date}")
+        
         successful_downloads = 0
         individual_files = []  # Track individual files created
         
-        # Download individual race cards (typically 1-11 races)
-        for race_no in range(1, 12):
+        # Download individual race cards (dynamically detected count)
+        for race_no in range(1, race_count + 1):
             logger.info(f"Processing {self.race_date} {self.race_course} Race {race_no}")
             
             df = self._scrape_race_data(race_no)
@@ -748,7 +1284,7 @@ class HKJCRacecardDownloader:
         # Create combined files in different formats
         if successful_downloads > 0:
             try:
-                self._create_combined_files(date_str)
+                self._create_combined_files(date_str, race_count)
                 
                 # Remove individual race files after successful combined file creation
                 self._cleanup_individual_files(individual_files)
@@ -780,8 +1316,8 @@ class HKJCRacecardDownloader:
     
 def main():
     # Configuration
-    race_date = date(2026, 4, 29)
-    race_course = "HV"  # ST / HV
+    race_date = date(2026, 4, 26)
+    race_course = "ST"  # ST / HV
     
     # Create downloader and process
     downloader = HKJCRacecardDownloader(race_date, race_course)
