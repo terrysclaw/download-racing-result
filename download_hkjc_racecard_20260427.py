@@ -149,6 +149,15 @@ class HKJCRacecardDownloader:
         
         return distance_factors.get(distance, factors)
     
+    def _apply_ground_adjustment(self, time_value: float, ground_condition: str, venue: str) -> float:
+        """Apply ground condition adjustment to time."""
+        if ground_condition == '好地至快地':
+            multiplier = 1.006 if venue == 'HV' else 1.004
+            return time_value * multiplier
+        elif ground_condition == '好地至黏地':
+            return time_value / 1.012
+        return time_value
+
     def _to_float(self, value) -> Optional[float]:
         """Safely convert mixed value to float."""
         if value is None or pd.isna(value) or value == '' or value == '---':
@@ -241,15 +250,47 @@ class HKJCRacecardDownloader:
             weight_adj = early_adj_per_section if i <= half_point else late_adj_per_section
             predicted[i] = round(base_time + weight_adj + gate_adj, 3)
 
-        # Jockey-trainer adjustment: pairs above/below 33% baseline run proportionally faster/slower.
-        # Coefficient 0.02 means a 50% pair (~+17% above baseline) adjusts each section by ~-0.34%.
+        # Jockey-trainer adjustment: pairs above/below 50% baseline run proportionally faster/slower.
+        # Coefficient 0.02 means a 60% pair (~+10% above baseline) adjusts each section by ~-0.20%.
         if jt_rate is not None:
-            jt_factor = 1.0 - (jt_rate - 0.33) * 0.02
+            jt_factor = 1.0 - (jt_rate - 0.50) * 0.02
             for i in range(1, target_section_count + 1):
                 if predicted[i] is not None:
                     predicted[i] = round(predicted[i] * jt_factor, 3)
 
         return predicted
+
+    def _add_win_probability(self, df: pd.DataFrame) -> pd.DataFrame:
+        """Estimate win probability by race using predicted total time."""
+        if df.empty or '預估總段速' not in df.columns:
+            return df
+
+        if '勝出機率' not in df.columns:
+            df['勝出機率'] = None
+
+        for race_no, race_df in df.groupby('場次'):
+            race_index = race_df.index
+            total_times = pd.to_numeric(df.loc[race_index, '預估總段速'], errors='coerce')
+            valid_times = total_times.dropna()
+
+            if valid_times.empty:
+                continue
+
+            # Convert faster (smaller) times into probabilities using a softmax-like transform.
+            # Temperature adapts to field spread; lower temperature increases separation.
+            spread = valid_times.std()
+            temperature = max(float(spread), 0.15) if pd.notna(spread) else 0.25
+            best_time = valid_times.min()
+            score = np.exp(-(valid_times - best_time) / temperature)
+            score_sum = score.sum()
+            if score_sum <= 0:
+                continue
+
+            prob = score / score_sum
+            for idx, p in prob.items():
+                df.at[idx, '勝出機率'] = round(float(p) * 100, 2)
+
+        return df
 
     def _simulate_race_shape(self, df: pd.DataFrame) -> pd.DataFrame:
         """Simulate likely race positioning from forecast early pace and draw."""
@@ -332,16 +373,23 @@ class HKJCRacecardDownloader:
         return df
 
     def _get_jockey_trainer_pair(self, jockey: str, trainer: str) -> Optional[pd.DataFrame]:
-        """Return historical rows for a jockey-trainer pair, stripping overweight notation."""
+        """Return historical rows for a jockey-trainer pair in the last 3 months, stripping overweight notation."""
         import re
+        from datetime import timedelta
         jockey = re.sub(r'\s*\([^)]*\)', '', str(jockey or '')).strip()
         trainer = re.sub(r'\s*\([^)]*\)', '', str(trainer or '')).strip()
         if self.df_results.empty or not jockey or not trainer:
             return None
-        pair = self.df_results[
+        cutoff = pd.Timestamp(self.race_date) - pd.DateOffset(months=3)
+        date_col = '日期' if '日期' in self.df_results.columns else None
+        pair_mask = (
             (self.df_results['騎師'] == jockey) &
             (self.df_results['練馬師'] == trainer)
-        ]
+        )
+        if date_col:
+            dates = pd.to_datetime(self.df_results[date_col], errors='coerce')
+            pair_mask = pair_mask & (dates >= cutoff)
+        pair = self.df_results[pair_mask]
         return pair if not pair.empty else None
 
     def _calculate_jockey_trainer_rate(self, jockey: str, trainer: str) -> Optional[str]:
@@ -367,7 +415,7 @@ class HKJCRacecardDownloader:
         """Add 3-run sectional averages and forecast sectionals for today's race."""
         avg_cols = [f'近3仗第 {i} 段平均' for i in range(1, 7)]
         pred_cols = [f'預估今場第 {i} 段' for i in range(1, 7)]
-        extra_cols = ['近3仗樣本數', '預估頭段(第1+2段)', '預估末段(最後2段)', '預估末段(第5+6段)', '預估總段速', '預計各分段排名', '模擬走勢', '模擬走位', '騎練合作上名率']
+        extra_cols = ['近3仗樣本數', '預估頭段(第1+2段)', '預估末段(最後2段)', '預估末段(第5+6段)', '預估總段速', '勝出機率', '預計各分段排名', '模擬走勢', '模擬走位', '騎練合作上名率']
 
         for col in avg_cols + pred_cols + extra_cols:
             df[col] = None
@@ -380,10 +428,20 @@ class HKJCRacecardDownloader:
             target_section_count = self._get_section_count_by_distance(row.get('路程'))
             sample_count = len(recent_runs)
             avg_sections = {}
+            has_ground_data = '場地狀況' in recent_runs.columns and '馬場' in recent_runs.columns
             for i in range(1, 7):
                 if i <= target_section_count:
                     section_series = pd.to_numeric(recent_runs.get(f'第 {i} 段'), errors='coerce')
-                    avg_value = section_series.mean()
+                    if has_ground_data:
+                        adjusted_values = []
+                        for idx, val in section_series.items():
+                            if pd.notna(val):
+                                ground = str(recent_runs.at[idx, '場地狀況'])
+                                venue = str(recent_runs.at[idx, '馬場'])
+                                adjusted_values.append(self._apply_ground_adjustment(val, ground, venue))
+                        avg_value = np.mean(adjusted_values) if adjusted_values else np.nan
+                    else:
+                        avg_value = section_series.mean()
                     avg_sections[i] = round(float(avg_value), 3) if pd.notna(avg_value) else None
                 else:
                     avg_sections[i] = None
@@ -423,6 +481,7 @@ class HKJCRacecardDownloader:
             ), axis=1
         )
 
+        df = self._add_win_probability(df)
         return self._simulate_race_shape(df)
     
     def _scrape_race_data(self, race_no: int) -> Optional[pd.DataFrame]:
@@ -488,7 +547,7 @@ class HKJCRacecardDownloader:
             '近3仗第 4 段平均', '近3仗第 5 段平均', '近3仗第 6 段平均',
             '預估今場第 1 段', '預估今場第 2 段', '預估今場第 3 段',
             '預估今場第 4 段', '預估今場第 5 段', '預估今場第 6 段',
-            '預估頭段(第1+2段)', '預估末段(最後2段)', '預估末段(第5+6段)', '預估總段速', '預計各分段排名', '模擬走勢', '模擬走位',
+            '預估頭段(第1+2段)', '預估末段(最後2段)', '預估末段(第5+6段)', '預估總段速', '勝出機率', '預計各分段排名', '模擬走勢', '模擬走位',
             '網址'
         ]
 
@@ -720,7 +779,7 @@ class HKJCRacecardDownloader:
             '近3仗樣本數',
             '預估今場第 1 段', '預估今場第 2 段', '預估今場第 3 段',
             '預估今場第 4 段', '預估今場第 5 段', '預估今場第 6 段',
-            '預估頭段(第1+2段)', '預估末段(最後2段)', '預估總段速',
+            '預估頭段(第1+2段)', '預估末段(最後2段)', '預估總段速', '勝出機率',
             '預計各分段排名', '模擬走勢', '模擬走位'
         ]
 
@@ -736,29 +795,21 @@ class HKJCRacecardDownloader:
                 race_df = prediction_map[race_no].head(4).copy()
                 horse_nos = race_df['馬匹編號'].astype(str).tolist()
                 horse_names = race_df['馬名'].fillna('').astype(str).tolist()
-                if '預估總段速數值' in race_df.columns:
-                    total_times = pd.to_numeric(race_df['預估總段速數值'], errors='coerce').tolist()
-                elif '預估總段速' in race_df.columns:
-                    total_times = pd.to_numeric(race_df['預估總段速'], errors='coerce').tolist()
-                else:
-                    total_times = []
+                top_win_prob = ''
+                if '勝出機率' in race_df.columns and len(race_df) > 0:
+                    top_prob_val = pd.to_numeric(race_df.iloc[0]['勝出機率'], errors='coerce')
+                    if pd.notna(top_prob_val):
+                        top_win_prob = f"{float(top_prob_val):.2f}%"
 
                 while len(horse_nos) < 4:
                     horse_nos.append('')
                     horse_names.append('')
-                while len(total_times) < 2:
-                    total_times.append(np.nan)
-
-                if pd.notna(total_times[0]) and pd.notna(total_times[1]):
-                    top2_gap = round(float(total_times[1]) - float(total_times[0]), 3)
-                else:
-                    top2_gap = ''
 
                 row: Dict[str, str] = {'場次': f'第{race_no}場'}
                 for rank_idx in range(4):
                     row[f'第{rank_idx + 1}名馬號'] = horse_nos[rank_idx]
                     row[f'第{rank_idx + 1}名馬名'] = horse_names[rank_idx]
-                row['第1-2名預估總段速差距'] = top2_gap
+                row['第1名勝出機率'] = top_win_prob
                 rows.append(row)
 
             return pd.DataFrame(rows)
@@ -844,6 +895,8 @@ class HKJCRacecardDownloader:
                     # Build prediction source sorted by 預估總段速 (smaller = faster).
                     if {'馬匹編號', '馬名', '預估總段速'}.issubset(df.columns):
                         pred_df = df[['馬匹編號', '馬名', '檔位', '預估總段速']].copy()
+                        if '勝出機率' in df.columns:
+                            pred_df['勝出機率'] = pd.to_numeric(df['勝出機率'], errors='coerce')
                         pred_df['檔位數值'] = pd.to_numeric(pred_df.get('檔位'), errors='coerce')
                         pred_df['預估總段速數值'] = pd.to_numeric(pred_df['預估總段速'], errors='coerce')
                         pred_df['缺值'] = pred_df['預估總段速數值'].isna()
@@ -852,7 +905,10 @@ class HKJCRacecardDownloader:
                             ascending=[True, True, True],
                             na_position='last'
                         )
-                        prediction_data[race_no] = pred_df[['馬匹編號', '馬名', '預估總段速數值']].reset_index(drop=True)
+                        keep_cols = ['馬匹編號', '馬名', '預估總段速數值']
+                        if '勝出機率' in pred_df.columns:
+                            keep_cols.append('勝出機率')
+                        prediction_data[race_no] = pred_df[keep_cols].reset_index(drop=True)
 
                     df_positioning.to_excel(writer, sheet_name=f"Race_{race_no}", index=False)
                     sheets_created += 1
