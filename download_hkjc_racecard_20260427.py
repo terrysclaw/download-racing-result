@@ -250,10 +250,10 @@ class HKJCRacecardDownloader:
             weight_adj = early_adj_per_section if i <= half_point else late_adj_per_section
             predicted[i] = round(base_time + weight_adj + gate_adj, 3)
 
-        # Jockey-trainer adjustment: pairs above/below 50% baseline run proportionally faster/slower.
-        # Coefficient 0.02 means a 60% pair (~+10% above baseline) adjusts each section by ~-0.20%.
+        # Jockey-trainer adjustment: pairs above/below 33% baseline run proportionally faster/slower.
+        # Coefficient 0.02 means a 43% pair (~+10% above baseline) adjusts each section by ~-0.20%.
         if jt_rate is not None:
-            jt_factor = 1.0 - (jt_rate - 0.50) * 0.02
+            jt_factor = 1.0 - (min(jt_rate, 0.70) - 0.33) * 0.02
             for i in range(1, target_section_count + 1):
                 if predicted[i] is not None:
                     predicted[i] = round(predicted[i] * jt_factor, 3)
@@ -273,7 +273,14 @@ class HKJCRacecardDownloader:
             total_times = pd.to_numeric(df.loc[race_index, '預估總段速'], errors='coerce')
             valid_times = total_times.dropna()
 
+            if len(race_index) == 0:
+                continue
+
+            # If no horse has a predicted total, assign equal chance to avoid hard exclusion.
             if valid_times.empty:
+                uniform_prob = round(100.0 / len(race_index), 2)
+                for idx in race_index:
+                    df.at[idx, '勝出機率'] = uniform_prob
                 continue
 
             # Convert faster (smaller) times into probabilities using a softmax-like transform.
@@ -281,7 +288,18 @@ class HKJCRacecardDownloader:
             spread = valid_times.std()
             temperature = max(float(spread), 0.15) if pd.notna(spread) else 0.25
             best_time = valid_times.min()
-            score = np.exp(-(valid_times - best_time) / temperature)
+
+            # Missing totals are imputed to a conservative back-marker time, so they keep
+            # a non-zero but typically lower chance than horses with actual same-condition samples.
+            if total_times.isna().any():
+                worst_time = valid_times.max()
+                missing_penalty = max(0.4, (float(spread) * 0.8) if pd.notna(spread) else 0.4)
+                imputed_time = float(worst_time) + missing_penalty
+                model_times = total_times.fillna(imputed_time)
+            else:
+                model_times = total_times
+
+            score = np.exp(-(model_times - best_time) / temperature)
             score_sum = score.sum()
             if score_sum <= 0:
                 continue
@@ -627,151 +645,6 @@ class HKJCRacecardDownloader:
         
         logger.info(f"Created combined files: Standard({standard_sheets_created} sheets), Terry({terry_sheets_created} sheets)")
 
-    def _generate_positioning_plot(self, df: pd.DataFrame, race_no: int, date_str: str) -> None:
-        """Generate a visualization plot for race positioning."""
-        try:
-            rcParams['font.sans-serif'] = ['SimHei', 'DejaVu Sans']
-            rcParams['axes.unicode_minus'] = False
-            
-            valid_data = df[
-                (df['檔位'].notna())
-            ].copy()
-            
-            if valid_data.empty:
-                return
-
-            valid_data['檔位數值'] = pd.to_numeric(valid_data['檔位'], errors='coerce')
-            valid_data = valid_data.dropna(subset=['檔位數值']).copy()
-            if valid_data.empty:
-                return
-
-            # 頭400: 第1+2段合計 (early pace)
-            valid_data['第1段預估'] = pd.to_numeric(valid_data.get('預估頭段(第1+2段)'), errors='coerce')
-
-            # 終點: 預估總段速 (overall total)
-            valid_data['最終預計'] = pd.to_numeric(valid_data.get('預估總段速'), errors='coerce')
-
-            # Keep horses with missing metrics by pushing them to the back of the field.
-            def rank_with_missing_last(metric_col: str) -> pd.Series:
-                metric = valid_data[metric_col]
-                rank = metric.rank(method='min', ascending=True)
-                missing_mask = metric.isna()
-                if missing_mask.any():
-                    start_rank = int(rank.max()) + 1 if rank.notna().any() else 1
-                    fallback_order = valid_data.loc[missing_mask, '檔位數值'].rank(method='first', ascending=True).astype(int)
-                    rank.loc[missing_mask] = start_rank + fallback_order - 1
-                return rank
-
-            valid_data['第1段排名'] = rank_with_missing_last('第1段預估')
-            valid_data['最終排名'] = rank_with_missing_last('最終預計')
-
-            fig, axes = plt.subplots(2, 1, figsize=(13, 7.5))
-            fig.patch.set_facecolor('#D9D9D9')
-
-            def draw_stage(stage_ax, rank_col: str, stage_title: str) -> None:
-                stage_ax.set_facecolor('#D9D9D9')
-                stage_df = valid_data.dropna(subset=[rank_col]).sort_values(by=[rank_col, '檔位數值']).copy()
-                if stage_df.empty:
-                    stage_ax.text(0.5, 0.5, f'{stage_title}: 無數據', ha='center', va='center', fontsize=13, color='#666666')
-                    stage_ax.set_xticks([])
-                    stage_ax.set_yticks([])
-                    for spine in stage_ax.spines.values():
-                        spine.set_visible(False)
-                    return
-
-                horse_count = len(stage_df)
-                front_cut = max(1, int(np.ceil(horse_count * 0.2)))
-                mid_cut = max(front_cut + 1, int(np.ceil(horse_count * 0.55)))
-                row_levels = []
-                for seq_no in range(1, horse_count + 1):
-                    if seq_no <= front_cut:
-                        row_levels.append(3.0)
-                    elif seq_no <= mid_cut:
-                        row_levels.append(2.0)
-                    else:
-                        row_levels.append(1.0)
-                stage_df['row_level'] = row_levels
-
-                # Re-layout by stage ranking so three panels show clear differences.
-                stage_df['display_x'] = np.nan
-                row_spans = {
-                    3.0: (4.5, 7.5),
-                    2.0: (2.5, 9.5),
-                    1.0: (1.0, 11.0)
-                }
-                for level, (x_min, x_max) in row_spans.items():
-                    row_mask = stage_df['row_level'] == level
-                    row_count = int(row_mask.sum())
-                    if row_count == 0:
-                        continue
-                    if row_count == 1:
-                        x_positions = np.array([(x_min + x_max) / 2])
-                    else:
-                        x_positions = np.linspace(x_min, x_max, row_count)
-                    stage_df.loc[row_mask, 'display_x'] = x_positions
-
-                for _, stage_row in stage_df.iterrows():
-                    x = float(stage_row['display_x'])
-                    y = float(stage_row['row_level'])
-                    horse_no = str(stage_row.get('馬匹編號', '')).strip()
-                    gate_no = str(stage_row.get('檔位', '')).strip()
-
-                    stage_ax.scatter(
-                        x,
-                        y,
-                        s=520,
-                        marker='v',
-                        color='#C2410C',
-                        edgecolors='#9A3412',
-                        linewidth=1.2,
-                        zorder=2
-                    )
-                    stage_ax.text(
-                        x,
-                        y + 0.03,
-                        horse_no,
-                        ha='center',
-                        va='center',
-                        fontsize=11,
-                        color='white',
-                        fontweight='bold',
-                        zorder=3
-                    )
-                    if gate_no:
-                        stage_ax.text(
-                            x,
-                            y - 0.28,
-                            f'檔{gate_no}',
-                            ha='center',
-                            va='center',
-                            fontsize=8,
-                            color='#6B7280',
-                            zorder=3
-                        )
-
-                stage_ax.set_xlim(0.3, 11.7)
-                stage_ax.set_ylim(0.25, 3.55)
-                stage_ax.set_xticks([])
-                stage_ax.set_yticks([])
-                stage_ax.set_title(stage_title, loc='left', fontsize=12, color='#333333', pad=6)
-                for spine in stage_ax.spines.values():
-                    spine.set_visible(False)
-
-            draw_stage(axes[0], '最終排名', '終點')
-            draw_stage(axes[1], '第1段排名', '頭800')
-
-            fig.suptitle(f'{date_str} Race {race_no} 走位模擬', fontsize=14, color='#222222', y=0.99)
-            plt.tight_layout(rect=[0, 0, 1, 0.97])
-            
-            # Save figure
-            output_path = f"Racecard_{date_str}_走位模擬_Race{race_no:02d}.png"
-            plt.savefig(output_path, dpi=100, bbox_inches='tight')
-            plt.close()
-            
-            logger.info(f"Generated positioning plot: {output_path}")
-        except Exception as e:
-            logger.error(f"Error generating positioning plot for Race {race_no}: {e}")
-
     def _create_positioning_file(self, date_str: str) -> None:
         """Create a dedicated Excel file for simulated running positions and generate visualization plots."""
         positioning_columns = [
@@ -860,7 +733,6 @@ class HKJCRacecardDownloader:
                     ws.column_dimensions[col_letter].width = 14
 
         sheets_created = 0
-        plots_created = 0
         prediction_data: Dict[int, pd.DataFrame] = {}
         with pd.ExcelWriter(f"Racecard_{date_str}_走位模擬.xlsx", engine='openpyxl') as writer:
             for race_no in range(1, 12):
@@ -912,10 +784,6 @@ class HKJCRacecardDownloader:
 
                     df_positioning.to_excel(writer, sheet_name=f"Race_{race_no}", index=False)
                     sheets_created += 1
-                    
-                    # Generate positioning visualization plot
-                    self._generate_positioning_plot(df, race_no, date_str)
-                    plots_created += 1
                 except FileNotFoundError:
                     logger.warning(f"File Racecard_{date_str}_{race_no}.xlsx not found for positioning format")
                 except Exception as e:
@@ -934,7 +802,7 @@ class HKJCRacecardDownloader:
                     max_col=prediction_sheet_df.shape[1]
                 )
 
-        logger.info(f"Created positioning file: Racecard_{date_str}_走位模擬.xlsx ({sheets_created} sheets) and {plots_created} visualization plots")
+        logger.info(f"Created positioning file: Racecard_{date_str}_走位模擬.xlsx ({sheets_created} sheets)")
     
     def download_all_racecards(self) -> None:
         """Download all racecards for the configured race date and course."""
