@@ -267,6 +267,11 @@ class HKJCRacecardDownloader:
 
         if '勝出機率' not in df.columns:
             df['勝出機率'] = None
+        if '公平賠率(扣稅)' not in df.columns:
+            df['公平賠率(扣稅)'] = None
+
+        # HKJC takeout rate for Win pool; fair odds are reduced after deduction.
+        hkjc_tax_rate = 0.175
 
         for race_no, race_df in df.groupby('場次'):
             race_index = race_df.index
@@ -281,6 +286,9 @@ class HKJCRacecardDownloader:
                 uniform_prob = round(100.0 / len(race_index), 2)
                 for idx in race_index:
                     df.at[idx, '勝出機率'] = uniform_prob
+                    prob_decimal = uniform_prob / 100.0
+                    fair_odds = ((1.0 - hkjc_tax_rate) / prob_decimal) if prob_decimal > 0 else np.nan
+                    df.at[idx, '公平賠率(扣稅)'] = round(float(fair_odds), 2) if pd.notna(fair_odds) else None
                 continue
 
             # Convert faster (smaller) times into probabilities using a softmax-like transform.
@@ -306,7 +314,10 @@ class HKJCRacecardDownloader:
 
             prob = score / score_sum
             for idx, p in prob.items():
-                df.at[idx, '勝出機率'] = round(float(p) * 100, 2)
+                prob_pct = round(float(p) * 100, 2)
+                df.at[idx, '勝出機率'] = prob_pct
+                fair_odds = ((1.0 - hkjc_tax_rate) / float(p)) if float(p) > 0 else np.nan
+                df.at[idx, '公平賠率(扣稅)'] = round(float(fair_odds), 2) if pd.notna(fair_odds) else None
 
         return df
 
@@ -433,7 +444,7 @@ class HKJCRacecardDownloader:
         """Add 3-run sectional averages and forecast sectionals for today's race."""
         avg_cols = [f'近3仗第 {i} 段平均' for i in range(1, 7)]
         pred_cols = [f'預估今場第 {i} 段' for i in range(1, 7)]
-        extra_cols = ['近3仗樣本數', '預估頭段(第1+2段)', '預估末段(最後2段)', '預估末段(第5+6段)', '預估總段速', '勝出機率', '預計各分段排名', '模擬走勢', '模擬走位', '騎練合作上名率']
+        extra_cols = ['近3仗樣本數', '預估頭段(第1+2段)', '預估末段(最後2段)', '預估末段(第5+6段)', '預估總段速', '勝出機率', '公平賠率(扣稅)', '預計各分段排名', '模擬走勢', '模擬走位', '騎練合作上名率']
 
         for col in avg_cols + pred_cols + extra_cols:
             df[col] = None
@@ -565,13 +576,42 @@ class HKJCRacecardDownloader:
             '近3仗第 4 段平均', '近3仗第 5 段平均', '近3仗第 6 段平均',
             '預估今場第 1 段', '預估今場第 2 段', '預估今場第 3 段',
             '預估今場第 4 段', '預估今場第 5 段', '預估今場第 6 段',
-            '預估頭段(第1+2段)', '預估末段(最後2段)', '預估末段(第5+6段)', '預估總段速', '勝出機率', '預計各分段排名', '模擬走勢', '模擬走位',
+            '預估頭段(第1+2段)', '預估末段(最後2段)', '預估末段(第5+6段)', '預估總段速', '勝出機率', '公平賠率(扣稅)', '預計各分段排名', '模擬走勢', '模擬走位',
             '網址'
         ]
 
         existing_columns = [col for col in required_columns if col in df.columns]
         df_terry = df[existing_columns].copy()
         return df_terry
+
+    def _highlight_fastest_section_cells(self, writer: pd.ExcelWriter, sheet_name: str, df: pd.DataFrame) -> None:
+        """Highlight the fastest value in each predicted section column with yellow fill."""
+        section_cols = [f'預估今場第 {i} 段' for i in range(1, 7)] + ['預估頭段(第1+2段)', '預估末段(最後2段)']
+        existing_cols = [col for col in section_cols if col in df.columns]
+        if not existing_cols:
+            return
+
+        ws = writer.book[sheet_name]
+        orange_fill = PatternFill(fill_type='solid', fgColor='FF6600')
+        yellow_fill = PatternFill(fill_type='solid', fgColor='FFFF00')
+
+        for col_name in existing_cols:
+            section_values = pd.to_numeric(df[col_name], errors='coerce')
+            valid_values = section_values.dropna()
+            if valid_values.empty:
+                continue
+
+            sorted_unique = sorted(valid_values.unique())
+            first_min = float(sorted_unique[0])
+            second_min = float(sorted_unique[1]) if len(sorted_unique) > 1 else None
+            col_idx = df.columns.get_loc(col_name) + 1
+
+            for row_idx, value in enumerate(section_values.tolist(), start=2):
+                if pd.notna(value):
+                    if abs(float(value) - first_min) < 1e-9:
+                        ws.cell(row=row_idx, column=col_idx).fill = orange_fill
+                    elif second_min is not None and abs(float(value) - second_min) < 1e-9:
+                        ws.cell(row=row_idx, column=col_idx).fill = yellow_fill
     
     def _create_combined_files(self, date_str: str) -> None:
         """Create combined Excel files for different formats."""
@@ -610,7 +650,9 @@ class HKJCRacecardDownloader:
                     df = pd.read_excel(f"Racecard_{date_str}_{race_no}.xlsx")
                     if not df.empty:
                         df = sort_by_predicted_total(df)
-                        df.to_excel(writer, sheet_name=f"Race_{race_no}", index=False)
+                        sheet_name = f"Race_{race_no}"
+                        df.to_excel(writer, sheet_name=sheet_name, index=False)
+                        self._highlight_fastest_section_cells(writer, sheet_name, df)
                         standard_sheets_created += 1
                 except FileNotFoundError:
                     logger.warning(f"File Racecard_{date_str}_{race_no}.xlsx not found")
@@ -630,7 +672,9 @@ class HKJCRacecardDownloader:
                         df = sort_by_predicted_total(df)
                         df_terry = self._create_terry_sheet(df)
                         if not df_terry.empty:
-                            df_terry.to_excel(writer, sheet_name=f"Race_{race_no}", index=False)
+                            sheet_name = f"Race_{race_no}"
+                            df_terry.to_excel(writer, sheet_name=sheet_name, index=False)
+                            self._highlight_fastest_section_cells(writer, sheet_name, df_terry)
                             terry_sheets_created += 1
                 except FileNotFoundError:
                     logger.warning(f"File Racecard_{date_str}_{race_no}.xlsx not found for Terry format")
@@ -652,7 +696,7 @@ class HKJCRacecardDownloader:
             '近3仗樣本數',
             '預估今場第 1 段', '預估今場第 2 段', '預估今場第 3 段',
             '預估今場第 4 段', '預估今場第 5 段', '預估今場第 6 段',
-            '預估頭段(第1+2段)', '預估末段(最後2段)', '預估總段速', '勝出機率',
+            '預估頭段(第1+2段)', '預估末段(最後2段)', '預估總段速', '勝出機率', '公平賠率(扣稅)',
             '預計各分段排名', '模擬走勢', '模擬走位'
         ]
 
@@ -669,10 +713,15 @@ class HKJCRacecardDownloader:
                 horse_nos = race_df['馬匹編號'].astype(str).tolist()
                 horse_names = race_df['馬名'].fillna('').astype(str).tolist()
                 top_win_prob = ''
+                top_fair_odds = ''
                 if '勝出機率' in race_df.columns and len(race_df) > 0:
                     top_prob_val = pd.to_numeric(race_df.iloc[0]['勝出機率'], errors='coerce')
                     if pd.notna(top_prob_val):
                         top_win_prob = f"{float(top_prob_val):.2f}%"
+                if '公平賠率(扣稅)' in race_df.columns and len(race_df) > 0:
+                    top_fair_odds_val = pd.to_numeric(race_df.iloc[0]['公平賠率(扣稅)'], errors='coerce')
+                    if pd.notna(top_fair_odds_val):
+                        top_fair_odds = f"{float(top_fair_odds_val):.2f}"
 
                 while len(horse_nos) < 4:
                     horse_nos.append('')
@@ -683,6 +732,58 @@ class HKJCRacecardDownloader:
                     row[f'第{rank_idx + 1}名馬號'] = horse_nos[rank_idx]
                     row[f'第{rank_idx + 1}名馬名'] = horse_names[rank_idx]
                 row['第1名勝出機率'] = top_win_prob
+                row['第1名公平賠率(扣稅)'] = top_fair_odds
+                rows.append(row)
+
+            return pd.DataFrame(rows)
+
+        def build_fastest_800_dataframe(fastest_map: Dict[int, pd.DataFrame]) -> pd.DataFrame:
+            """Build one-row-per-race summary for fastest head 800m and tail 800m horses."""
+            if not fastest_map:
+                return pd.DataFrame()
+
+            rows: List[Dict[str, str]] = []
+            race_nos = sorted(fastest_map.keys())
+
+            for race_no in race_nos:
+                race_df = fastest_map[race_no].copy()
+                race_df['馬匹編號數值'] = pd.to_numeric(race_df.get('馬匹編號'), errors='coerce')
+                race_df['檔位數值'] = pd.to_numeric(race_df.get('檔位'), errors='coerce')
+
+                row: Dict[str, str] = {
+                    '場次': f'第{race_no}場',
+                    '頭800最快馬號': '',
+                    '頭800最快馬名': '',
+                    '頭800時間': '',
+                    '尾800最快馬號': '',
+                    '尾800最快馬名': '',
+                    '尾800時間': ''
+                }
+
+                if '預估頭段(第1+2段)' in race_df.columns:
+                    head_df = race_df.dropna(subset=['預估頭段(第1+2段)']).sort_values(
+                        by=['預估頭段(第1+2段)', '檔位數值', '馬匹編號數值'],
+                        ascending=[True, True, True],
+                        na_position='last'
+                    )
+                    if not head_df.empty:
+                        head_top = head_df.iloc[0]
+                        row['頭800最快馬號'] = str(head_top.get('馬匹編號', ''))
+                        row['頭800最快馬名'] = str(head_top.get('馬名', ''))
+                        row['頭800時間'] = f"{float(head_top['預估頭段(第1+2段)']):.3f}"
+
+                if '預估末段(最後2段)' in race_df.columns:
+                    tail_df = race_df.dropna(subset=['預估末段(最後2段)']).sort_values(
+                        by=['預估末段(最後2段)', '檔位數值', '馬匹編號數值'],
+                        ascending=[True, True, True],
+                        na_position='last'
+                    )
+                    if not tail_df.empty:
+                        tail_top = tail_df.iloc[0]
+                        row['尾800最快馬號'] = str(tail_top.get('馬匹編號', ''))
+                        row['尾800最快馬名'] = str(tail_top.get('馬名', ''))
+                        row['尾800時間'] = f"{float(tail_top['預估末段(最後2段)']):.3f}"
+
                 rows.append(row)
 
             return pd.DataFrame(rows)
@@ -732,8 +833,44 @@ class HKJCRacecardDownloader:
                 else:
                     ws.column_dimensions[col_letter].width = 14
 
+        def style_fastest_800_sheet(writer: pd.ExcelWriter, max_row: int, max_col: int) -> None:
+            """Apply simple tabular formatting for fastest 800 summary sheet."""
+            ws = writer.book['fastest_800']
+
+            header_fill = PatternFill(fill_type='solid', fgColor='D9D9D9')
+            body_fill = PatternFill(fill_type='solid', fgColor='FFF2CC')
+            thin_side = Side(style='thin', color='BFBFBF')
+            thin_border = Border(left=thin_side, right=thin_side, top=thin_side, bottom=thin_side)
+
+            for col in range(1, max_col + 1):
+                header_cell = ws.cell(row=1, column=col)
+                header_cell.fill = header_fill
+                header_cell.font = Font(bold=True)
+                header_cell.alignment = Alignment(horizontal='center', vertical='center')
+                header_cell.border = thin_border
+
+            for row in range(2, max_row + 1):
+                for col in range(1, max_col + 1):
+                    cell = ws.cell(row=row, column=col)
+                    cell.fill = body_fill
+                    cell.border = thin_border
+                    if col in [1, 2, 4, 5, 7]:
+                        cell.alignment = Alignment(horizontal='center', vertical='center')
+                    else:
+                        cell.alignment = Alignment(horizontal='left', vertical='center')
+
+            ws.freeze_panes = 'A2'
+            ws.column_dimensions['A'].width = 8
+            ws.column_dimensions['B'].width = 12
+            ws.column_dimensions['C'].width = 16
+            ws.column_dimensions['D'].width = 10
+            ws.column_dimensions['E'].width = 12
+            ws.column_dimensions['F'].width = 16
+            ws.column_dimensions['G'].width = 10
+
         sheets_created = 0
         prediction_data: Dict[int, pd.DataFrame] = {}
+        fastest_800_data: Dict[int, pd.DataFrame] = {}
         with pd.ExcelWriter(f"Racecard_{date_str}_走位模擬.xlsx", engine='openpyxl') as writer:
             for race_no in range(1, 12):
                 try:
@@ -769,6 +906,8 @@ class HKJCRacecardDownloader:
                         pred_df = df[['馬匹編號', '馬名', '檔位', '預估總段速']].copy()
                         if '勝出機率' in df.columns:
                             pred_df['勝出機率'] = pd.to_numeric(df['勝出機率'], errors='coerce')
+                        if '公平賠率(扣稅)' in df.columns:
+                            pred_df['公平賠率(扣稅)'] = pd.to_numeric(df['公平賠率(扣稅)'], errors='coerce')
                         pred_df['檔位數值'] = pd.to_numeric(pred_df.get('檔位'), errors='coerce')
                         pred_df['預估總段速數值'] = pd.to_numeric(pred_df['預估總段速'], errors='coerce')
                         pred_df['缺值'] = pred_df['預估總段速數值'].isna()
@@ -780,9 +919,34 @@ class HKJCRacecardDownloader:
                         keep_cols = ['馬匹編號', '馬名', '預估總段速數值']
                         if '勝出機率' in pred_df.columns:
                             keep_cols.append('勝出機率')
+                        if '公平賠率(扣稅)' in pred_df.columns:
+                            keep_cols.append('公平賠率(扣稅)')
                         prediction_data[race_no] = pred_df[keep_cols].reset_index(drop=True)
 
-                    df_positioning.to_excel(writer, sheet_name=f"Race_{race_no}", index=False)
+                    if {'馬匹編號', '馬名'}.issubset(df.columns):
+                        fastest_cols = ['馬匹編號', '馬名']
+                        if '檔位' in df.columns:
+                            fastest_cols.append('檔位')
+                        if '預估頭段(第1+2段)' in df.columns:
+                            fastest_cols.append('預估頭段(第1+2段)')
+                        if '預估末段(最後2段)' in df.columns:
+                            fastest_cols.append('預估末段(最後2段)')
+
+                        if ('預估頭段(第1+2段)' in fastest_cols) or ('預估末段(最後2段)' in fastest_cols):
+                            fastest_df = df[fastest_cols].copy()
+                            if '預估頭段(第1+2段)' in fastest_df.columns:
+                                fastest_df['預估頭段(第1+2段)'] = pd.to_numeric(
+                                    fastest_df['預估頭段(第1+2段)'], errors='coerce'
+                                )
+                            if '預估末段(最後2段)' in fastest_df.columns:
+                                fastest_df['預估末段(最後2段)'] = pd.to_numeric(
+                                    fastest_df['預估末段(最後2段)'], errors='coerce'
+                                )
+                            fastest_800_data[race_no] = fastest_df
+
+                    sheet_name = f"Race_{race_no}"
+                    df_positioning.to_excel(writer, sheet_name=sheet_name, index=False)
+                    self._highlight_fastest_section_cells(writer, sheet_name, df_positioning)
                     sheets_created += 1
                 except FileNotFoundError:
                     logger.warning(f"File Racecard_{date_str}_{race_no}.xlsx not found for positioning format")
@@ -801,6 +965,16 @@ class HKJCRacecardDownloader:
                     max_row=prediction_sheet_df.shape[0] + 1,
                     max_col=prediction_sheet_df.shape[1]
                 )
+
+                if fastest_800_data:
+                    fastest_800_sheet_df = build_fastest_800_dataframe(fastest_800_data)
+                    if not fastest_800_sheet_df.empty:
+                        fastest_800_sheet_df.to_excel(writer, sheet_name='fastest_800', index=False)
+                        style_fastest_800_sheet(
+                            writer,
+                            max_row=fastest_800_sheet_df.shape[0] + 1,
+                            max_col=fastest_800_sheet_df.shape[1]
+                        )
 
         logger.info(f"Created positioning file: Racecard_{date_str}_走位模擬.xlsx ({sheets_created} sheets)")
     
@@ -867,8 +1041,8 @@ class HKJCRacecardDownloader:
     
 def main():
     # Configuration
-    race_date = date(2026, 4, 29)
-    race_course = "HV"  # ST / HV
+    race_date = date(2026, 5, 9)
+    race_course = "ST"  # ST / HV
     
     # Create downloader and process
     downloader = HKJCRacecardDownloader(race_date, race_course)

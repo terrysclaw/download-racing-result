@@ -66,7 +66,10 @@ class HKJCResultDownloader:
             # {'date': date(2026, 4, 15), 'course': 'HV'},
             # {'date': date(2026, 4, 19), 'course': 'ST'},
             # {'date': date(2026, 4, 22), 'course': 'HV'},
-            {'date': date(2026, 4, 26), 'course': 'ST'},
+            # {'date': date(2026, 4, 26), 'course': 'ST'},
+            # {'date': date(2026, 4, 29), 'course': 'HV'},
+            # {'date': date(2026, 5, 3), 'course': 'ST'},
+            {'date': date(2026, 5, 6), 'course': 'ST'},
             # Add more 2025 dates as needed
         ]
         
