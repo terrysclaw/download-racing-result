@@ -167,6 +167,27 @@ class HKJCRacecardDownloader:
         except (TypeError, ValueError):
             return None
 
+    def _get_distance_scale_factor(
+        self,
+        tgt_venue: str, tgt_surface: str, tgt_dist: float,
+        src_venue: str, src_surface: str, src_dist: float,
+    ) -> float:
+        """Return a time scale factor from source to target conditions.
+
+        Uses HKJC track standard times (Class 3 benchmark) when both keys exist,
+        so cross-venue and cross-distance adjustments reflect real pace differences
+        rather than a naive linear distance ratio.
+        Falls back to target/source distance ratio if either key is missing.
+        """
+        src_key = (src_venue, src_surface, int(round(src_dist)))
+        tgt_key = (tgt_venue, tgt_surface, int(round(tgt_dist)))
+        src_std = self._TRACK_STANDARD_TIMES.get(src_key)
+        tgt_std = self._TRACK_STANDARD_TIMES.get(tgt_key)
+        if src_std and tgt_std and src_std > 0:
+            return tgt_std / src_std
+        # Fallback: pure distance ratio (ignores venue/surface difference)
+        return (tgt_dist / src_dist) if src_dist > 0 else 1.0
+
     def _get_section_count_by_distance(self, distance_value) -> int:
         """Map race distance to practical HK sectional count."""
         distance = self._to_float(distance_value)
@@ -180,19 +201,152 @@ class HKJCRacecardDownloader:
             return 5
         return 6
 
-    def _get_recent_three_runs(self, row: pd.Series) -> pd.DataFrame:
-        """Get recent 3 runs for sectional forecasting (same venue required)."""
-        if self.df_results.empty:
-            return pd.DataFrame()
+    def _get_section_sizes(self, distance: float) -> List[int]:
+        """Return HKJC section sizes (metres, start→finish) for the given race distance.
 
-        same_venue_filter = (
-            (self.df_results['布號'] == row['烙號']) &
+        HKJC measures sections from fixed finish-relative timing marks at every 400 m
+        (400 m, 800 m, 1200 m, 1600 m, 2000 m from finish).  The *last* section is
+        always 400 m; intermediate sections are also 400 m; the *first* section is
+        whatever remains (e.g. 200 m for 1400 m, 450 m for 1650 m).
+        """
+        d = int(round(distance))
+        n = self._get_section_count_by_distance(d)
+        trailing = (n - 1) * 400          # metres covered by all sections except the first
+        first = d - trailing
+        return [first] + [400] * (n - 1)
+
+    # Surface time conversion factors: fallback when standard-time lookup fails.
+    # Based on HKJC table: ST 1200m turf=69.00s vs AW=68.95s → near-parity.
+    _SURFACE_FACTORS: Dict[Tuple[str, str], float] = {
+        ('草地', '泥地'): 0.999,
+        ('泥地', '草地'): 1.001,
+    }
+
+    # HKJC official track standard times (seconds), Class 3 benchmark, updated 2025-08-26.
+    # Used to compute accurate cross-distance / cross-venue scaling factors.
+    _TRACK_STANDARD_TIMES: Dict[Tuple[str, str, int], float] = {
+        # Sha Tin Turf (沙田草地)
+        ('ST', '草地', 1000): 56.45,
+        ('ST', '草地', 1200): 69.00,
+        ('ST', '草地', 1400): 81.65,
+        ('ST', '草地', 1600): 94.70,
+        ('ST', '草地', 1800): 107.50,
+        ('ST', '草地', 2000): 121.90,
+        ('ST', '草地', 2400): 147.00,
+        # Happy Valley Turf (跑馬地草地)
+        ('HV', '草地', 1000): 56.65,
+        ('HV', '草地', 1200): 69.60,
+        ('HV', '草地', 1650): 99.90,
+        ('HV', '草地', 1800): 109.45,
+        ('HV', '草地', 2200): 136.60,
+        # Sha Tin All-Weather / Dirt (沙田全天候)
+        ('ST', '泥地', 1200): 68.95,
+        ('ST', '泥地', 1650): 99.05,
+        ('ST', '泥地', 1800): 108.05,
+    }
+
+    # HKJC Class-3 reference sectional times (seconds, start→finish) from
+    # https://racing.hkjc.com/zh-hk/local/page/racing-course-time (updated 2025-08-26).
+    # Used for reference-based cross-distance section remapping so that section
+    # sizes and pace profiles are matched correctly (e.g. 1400m sec1=200m vs
+    # 1600m sec1=400m are converted via their respective reference values).
+    _TRACK_REFERENCE_SECTIONALS: Dict[Tuple[str, str, int], Tuple[float, ...]] = {
+        # Sha Tin Turf
+        ('ST', '草地', 1000): (13.05, 20.65, 22.75),
+        ('ST', '草地', 1200): (23.70, 22.35, 22.95),
+        ('ST', '草地', 1400): (13.45, 21.80, 23.15, 23.25),
+        ('ST', '草地', 1600): (24.50, 22.90, 23.80, 23.50),
+        ('ST', '草地', 1800): (13.85, 22.30, 23.80, 24.00, 23.55),
+        ('ST', '草地', 2000): (26.05, 24.70, 24.05, 23.55, 23.55),
+        ('ST', '草地', 2400): (25.60, 24.50, 25.35, 23.85, 23.75, 23.95),  # 分級賽
+        # Happy Valley Turf
+        ('HV', '草地', 1000): (12.50, 21.00, 23.15),
+        ('HV', '草地', 1200): (23.50, 22.55, 23.55),
+        ('HV', '草地', 1650): (27.95, 23.85, 24.25, 23.85),
+        ('HV', '草地', 1800): (13.75, 23.00, 24.30, 24.45, 23.95),
+        ('HV', '草地', 2200): (14.35, 23.70, 24.95, 24.85, 24.45, 24.30),
+        # Sha Tin All-Weather
+        ('ST', '泥地', 1200): (23.30, 22.05, 23.20),
+        ('ST', '泥地', 1650): (27.90, 23.00, 23.75, 23.95),
+        ('ST', '泥地', 1800): (13.75, 22.80, 23.70, 23.85, 23.95),
+    }
+
+    def _get_recent_three_runs(self, row: pd.Series) -> Tuple[pd.DataFrame, Optional[float], int]:
+        """Get recent runs with progressive fallback for horses without same-course history.
+
+        Returns:
+            (DataFrame, source_distance, fallback_level)
+            fallback_level: 1=same venue/surface/dist, 2=same surface/dist any venue,
+                            3=same surface nearby dist (±250m), 4=same surface any dist,
+                            5=any surface, 0=no data
+        """
+        if self.df_results.empty:
+            return pd.DataFrame(), None, 0
+
+        brand = row['烙號']
+        surface = row['泥草']
+        target_dist_raw = row['路程']
+        target_dist = self._to_float(target_dist_raw)
+
+        # Level 1: Exact match (same venue, surface, distance) — original behaviour
+        exact_filter = (
+            (self.df_results['布號'] == brand) &
             (self.df_results['馬場'] == row['馬場']) &
-            (self.df_results['泥草'] == row['泥草']) &
-            (self.df_results['路程'] == row['路程']) &
+            (self.df_results['泥草'] == surface) &
+            (self.df_results['路程'] == target_dist_raw) &
             (self.df_results['獨贏賠率'] > 0)
         )
-        return self.df_results[same_venue_filter].tail(3)
+        result = self.df_results[exact_filter].tail(3)
+        if not result.empty:
+            return result, target_dist, 1
+
+        # Level 2: Same surface + distance, any venue (e.g. ST record for HV race)
+        same_dist_filter = (
+            (self.df_results['布號'] == brand) &
+            (self.df_results['泥草'] == surface) &
+            (self.df_results['路程'] == target_dist_raw) &
+            (self.df_results['獨贏賠率'] > 0)
+        )
+        result = self.df_results[same_dist_filter].tail(3)
+        if not result.empty:
+            return result, target_dist, 2
+
+        # Level 3: Same surface, nearby distance (±200m), any venue
+        if target_dist is not None:
+            numeric_dist = pd.to_numeric(self.df_results['路程'], errors='coerce')
+            nearby_filter = (
+                (self.df_results['布號'] == brand) &
+                (self.df_results['泥草'] == surface) &
+                ((numeric_dist - target_dist).abs() <= 250) &
+                (self.df_results['獨贏賠率'] > 0)
+            )
+            result = self.df_results[nearby_filter].tail(3)
+            if not result.empty:
+                source_dist = pd.to_numeric(result['路程'], errors='coerce').mean()
+                return result, float(source_dist) if pd.notna(source_dist) else target_dist, 3
+
+        # Level 4: Same surface, any distance
+        any_dist_filter = (
+            (self.df_results['布號'] == brand) &
+            (self.df_results['泥草'] == surface) &
+            (self.df_results['獨贏賠率'] > 0)
+        )
+        result = self.df_results[any_dist_filter].tail(3)
+        if not result.empty:
+            source_dist = pd.to_numeric(result['路程'], errors='coerce').mean()
+            return result, float(source_dist) if pd.notna(source_dist) else target_dist, 4
+
+        # Level 5: Any surface (last resort)
+        any_filter = (
+            (self.df_results['布號'] == brand) &
+            (self.df_results['獨贏賠率'] > 0)
+        )
+        result = self.df_results[any_filter].tail(3)
+        if not result.empty:
+            source_dist = pd.to_numeric(result['路程'], errors='coerce').mean()
+            return result, float(source_dist) if pd.notna(source_dist) else target_dist, 5
+
+        return pd.DataFrame(), None, 0
 
     def _calculate_predicted_sections(
         self,
@@ -297,13 +451,30 @@ class HKJCRacecardDownloader:
             temperature = max(float(spread), 0.15) if pd.notna(spread) else 0.25
             best_time = valid_times.min()
 
-            # Missing totals are imputed to a conservative back-marker time, so they keep
-            # a non-zero but typically lower chance than horses with actual same-condition samples.
+            # Missing totals: use rating-based interpolation when possible, else conservative penalty.
             if total_times.isna().any():
                 worst_time = valid_times.max()
                 missing_penalty = max(0.4, (float(spread) * 0.8) if pd.notna(spread) else 0.4)
-                imputed_time = float(worst_time) + missing_penalty
-                model_times = total_times.fillna(imputed_time)
+                default_imputed = float(worst_time) + missing_penalty
+                all_ratings = pd.to_numeric(df.loc[race_index, '評分'], errors='coerce')
+                rated_valid_idx = valid_times.index.intersection(all_ratings.dropna().index)
+                model_times = total_times.copy().astype(float)
+                for idx in total_times[total_times.isna()].index:
+                    horse_rating = all_ratings.get(idx)
+                    if pd.notna(horse_rating) and len(rated_valid_idx) >= 2:
+                        rated_times = valid_times.reindex(rated_valid_idx).dropna()
+                        rated_ratings = all_ratings.reindex(rated_valid_idx).dropna()
+                        rating_min, rating_max = float(rated_ratings.min()), float(rated_ratings.max())
+                        rating_range = rating_max - rating_min
+                        if rating_range > 0:
+                            pct = (float(horse_rating) - rating_min) / rating_range
+                            # Higher rating (larger pct) → faster (smaller) time
+                            estimated = float(rated_times.max()) - pct * (float(rated_times.max()) - float(rated_times.min()))
+                            model_times.at[idx] = max(float(best_time) * 0.98, min(estimated, default_imputed))
+                        else:
+                            model_times.at[idx] = default_imputed
+                    else:
+                        model_times.at[idx] = default_imputed
             else:
                 model_times = total_times
 
@@ -440,17 +611,219 @@ class HKJCRacecardDownloader:
         placed = pair['名次'].apply(lambda x: pd.to_numeric(x, errors='coerce')).le(3).sum()
         return placed / total
 
+    def _remap_sections_by_finish_distance(
+        self,
+        src_sections: Dict[int, Optional[float]],
+        src_dist: float,
+        tgt_dist: float,
+        time_scale: float,
+    ) -> Dict[int, Optional[float]]:
+        """Remap source sectional times to the target section layout.
+
+        HKJC times sections from fixed finish-relative marks (400 m, 800 m, …).
+        Sections that cover the *same finish-relative range* are matched directly;
+        any extra metres at the *start* (when tgt_dist > src_dist) are estimated
+        using the pace of the first known source section.
+
+        The whole result is normalised so that Σ target_sections = src_total × time_scale,
+        removing any error introduced by the start-section extrapolation.
+        """
+        src_sizes = self._get_section_sizes(src_dist)
+        tgt_sizes = self._get_section_sizes(tgt_dist)
+        src_n = len(src_sizes)
+        tgt_n = len(tgt_sizes)
+
+        # Pace (s/m) for each known source section; fill gaps with mean.
+        src_paces: Dict[int, float] = {}
+        for i in range(1, src_n + 1):
+            v = src_sections.get(i)
+            if v is not None and src_sizes[i - 1] > 0:
+                src_paces[i] = float(v) / src_sizes[i - 1]
+        if not src_paces:
+            return {}
+        avg_pace = float(np.mean(list(src_paces.values())))
+        for i in range(1, src_n + 1):
+            src_paces.setdefault(i, avg_pace)
+        first_src_pace = src_paces[1]   # used to extrapolate "before source start"
+
+        # Cumulative distance from finish to the *start* of each section (1-indexed).
+        # For source: src_start_ff[0] = src_dist (start of sec 1 = src_dist from finish)
+        #             src_start_ff[i] = src_dist - sum(src_sizes[0..i])
+        def _start_from_finish(sizes: List[int]) -> List[float]:
+            result = []
+            cum = float(sum(sizes))
+            for s in sizes:
+                result.append(cum)
+                cum -= s
+            return result   # result[i] = dist from finish to start of section i+1
+
+        src_sff = _start_from_finish(src_sizes)   # index 0 = sec1, etc.
+        tgt_sff = _start_from_finish(tgt_sizes)
+
+        raw: Dict[int, float] = {}
+        for j in range(tgt_n):
+            t_far  = tgt_sff[j]                       # farther from finish
+            t_near = t_far - tgt_sizes[j]              # closer to finish
+
+            t_total = 0.0
+            remaining = float(tgt_sizes[j])
+
+            for i in range(src_n):
+                s_far  = src_sff[i]
+                s_near = s_far - src_sizes[i]
+
+                ov_far  = min(t_far,  s_far)
+                ov_near = max(t_near, s_near)
+                if ov_far <= ov_near:
+                    continue
+
+                t_total   += src_paces[i + 1] * (ov_far - ov_near)
+                remaining -= (ov_far - ov_near)
+
+            # Any remaining metres are *before* the source start → extrapolate.
+            if remaining > 1e-9:
+                t_total += first_src_pace * remaining
+
+            raw[j + 1] = t_total
+
+        # Normalise: ensure Σ raw × norm = src_total × time_scale.
+        known_src = [float(v) for v in src_sections.values() if v is not None]
+        src_total = sum(known_src) if known_src else 0.0
+        raw_total = sum(raw.values())
+        if raw_total > 1e-9 and src_total > 0:
+            norm = (src_total * time_scale) / raw_total
+        else:
+            norm = time_scale
+
+        return {j: round(t * norm, 3) for j, t in raw.items()}
+
+    def _remap_sections_reference_based(
+        self,
+        src_sections: Dict[int, Optional[float]],
+        src_dist: float,
+        src_venue: str,
+        src_surface: str,
+        tgt_dist: float,
+        tgt_venue: str,
+        tgt_surface: str,
+        time_scale: float,
+    ) -> Dict[int, Optional[float]]:
+        """Remap source sectional times to target using HKJC Class-3 reference sectionals.
+
+        Algorithm (all sections are tail-aligned, i.e. k=1 = last 400m):
+          1. Compute ratio_k = horse_src[k] / ref_src[k] for each common tail section.
+          2. pred_tgt[k] = ref_tgt[k] × ratio_k  (direct calibration).
+          3. For extra target sections at the START (tgt_dist > src_dist, no source
+             counterpart), use avg_ratio so the horse's overall performance level is
+             preserved.
+          4. Normalise so Σ result = src_total × time_scale.
+
+        Falls back to pace-based remapping when reference data is unavailable.
+        """
+        src_key = (src_venue, src_surface, int(round(src_dist)))
+        tgt_key = (tgt_venue, tgt_surface, int(round(tgt_dist)))
+        ref_src = self._TRACK_REFERENCE_SECTIONALS.get(src_key)
+        ref_tgt = self._TRACK_REFERENCE_SECTIONALS.get(tgt_key)
+
+        if not ref_src or not ref_tgt:
+            return self._remap_sections_by_finish_distance(
+                src_sections, src_dist, tgt_dist, time_scale
+            )
+
+        src_n = len(ref_src)
+        tgt_n = len(ref_tgt)
+
+        # Compute horse's performance ratio vs reference, tail-aligned.
+        # k=1 → last section, k=2 → second-to-last, etc.
+        ratios: Dict[int, float] = {}
+        for k in range(1, src_n + 1):
+            src_idx = src_n + 1 - k          # 1-based section index
+            v = src_sections.get(src_idx)
+            ref_v = float(ref_src[src_idx - 1])
+            if v is not None and ref_v > 0:
+                ratios[k] = float(v) / ref_v
+
+        if not ratios:
+            return self._remap_sections_by_finish_distance(
+                src_sections, src_dist, tgt_dist, time_scale
+            )
+
+        avg_ratio = float(np.mean(list(ratios.values())))
+
+        # Build target sections: pred_tgt[j] = ref_tgt[j] × ratio_k (tail-aligned).
+        raw: Dict[int, float] = {}
+        for j in range(1, tgt_n + 1):
+            k = tgt_n + 1 - j               # tail-alignment index for this target section
+            ratio = ratios.get(k, avg_ratio) # avg_ratio for extra start sections
+            raw[j] = float(ref_tgt[j - 1]) * ratio
+
+        # Normalise so total = src_total × time_scale.
+        known_src = [float(v) for v in src_sections.values() if v is not None]
+        src_total = sum(known_src) if known_src else 0.0
+        raw_total = sum(raw.values())
+        norm = (src_total * time_scale) / raw_total if raw_total > 1e-9 and src_total > 0 else 1.0
+
+        return {j: round(t * norm, 3) for j, t in raw.items()}
+
+    def _compute_head_tail_800(
+        self,
+        predicted_sections: Dict[int, Optional[float]],
+        total_dist: Optional[float],
+        section_count: int,
+    ) -> Tuple[Optional[float], Optional[float]]:
+        """Compute first-800m and last-800m predicted times using HKJC section sizes.
+
+        Uses actual HKJC section sizes (e.g. [200,400,400,400] for 1400m) so that
+        head/tail exactly cover 800 m of course rather than an arbitrary fraction.
+        """
+        if not total_dist or total_dist <= 0 or section_count <= 0:
+            return None, None
+
+        section_sizes = self._get_section_sizes(total_dist)
+        if len(section_sizes) != section_count:
+            # Fallback: equal sections
+            sz = total_dist / section_count
+            section_sizes = [sz] * section_count
+
+        target = min(800.0, total_dist)
+
+        def _accumulate(from_start: bool) -> Optional[float]:
+            remaining = target
+            acc = 0.0
+            pairs = (
+                list(zip(range(1, section_count + 1), section_sizes))
+                if from_start
+                else list(zip(range(section_count, 0, -1), reversed(section_sizes)))
+            )
+            for idx, sz in pairs:
+                t = predicted_sections.get(idx)
+                if t is None:
+                    return None
+                if remaining >= sz - 1e-9:
+                    acc += float(t)
+                    remaining -= sz
+                else:
+                    acc += float(t) * (remaining / sz)
+                    remaining = 0.0
+                if remaining <= 1e-9:
+                    break
+            return round(acc, 3) if remaining <= 1e-9 else None
+
+        return _accumulate(True), _accumulate(False)
+
     def _add_sectional_forecast(self, df: pd.DataFrame) -> pd.DataFrame:
         """Add 3-run sectional averages and forecast sectionals for today's race."""
         avg_cols = [f'近3仗第 {i} 段平均' for i in range(1, 7)]
         pred_cols = [f'預估今場第 {i} 段' for i in range(1, 7)]
-        extra_cols = ['近3仗樣本數', '預估頭段(第1+2段)', '預估末段(最後2段)', '預估末段(第5+6段)', '預估總段速', '勝出機率', '公平賠率(扣稅)', '預計各分段排名', '模擬走勢', '模擬走位', '騎練合作上名率']
+        extra_cols = ['近3仗樣本數', '近況來源', '預估頭段(第1+2段)', '預估末段(最後2段)', '預估末段(第5+6段)', '預估總段速', '勝出機率', '公平賠率(扣稅)', '預計各分段排名', '模擬走勢', '模擬走位', '騎練合作上名率']
 
         for col in avg_cols + pred_cols + extra_cols:
             df[col] = None
 
+        _FALLBACK_LABELS = {1: '同場同程', 2: '換場同程', 3: '換距近', 4: '換距遠', 5: '換面'}
+
         for index, row in df.iterrows():
-            recent_runs = self._get_recent_three_runs(row)
+            recent_runs, source_dist, fallback_level = self._get_recent_three_runs(row)
             if recent_runs.empty:
                 continue
 
@@ -458,8 +831,52 @@ class HKJCRacecardDownloader:
             sample_count = len(recent_runs)
             avg_sections = {}
             has_ground_data = '場地狀況' in recent_runs.columns and '馬場' in recent_runs.columns
-            for i in range(1, 7):
-                if i <= target_section_count:
+            target_dist = self._to_float(row.get('路程'))
+            tgt_venue_str = str(row.get('馬場', ''))
+            tgt_surface_str = str(row.get('泥草', ''))
+
+            if fallback_level >= 3 and target_dist is not None:
+                # Levels 3-5: runs may come from MIXED distances (e.g. 1600m + 1800m + 1800m).
+                # Section 1 of a 1800m race is only 200 m while section 1 of a 1600m race is
+                # 400 m — naively averaging them produces nonsense.  Instead, remap each run
+                # individually to the target distance first, then average the remapped values.
+                remapped_runs_list: List[Dict[int, Optional[float]]] = []
+                for _, run_row in recent_runs.iterrows():
+                    run_dist = self._to_float(run_row.get('路程'))
+                    if run_dist is None:
+                        continue
+                    run_sections_raw: Dict[int, Optional[float]] = {}
+                    for i in range(1, 7):
+                        v = self._to_float(run_row.get(f'第 {i} 段'))
+                        if v is not None and has_ground_data:
+                            ground = str(run_row.get('場地狀況', ''))
+                            venue = str(run_row.get('馬場', ''))
+                            v = self._apply_ground_adjustment(v, ground, venue)
+                        run_sections_raw[i] = v
+                    run_venue = str(run_row.get('馬場', tgt_venue_str))
+                    run_surface = str(run_row.get('泥草', tgt_surface_str))
+                    scale = self._get_distance_scale_factor(
+                        tgt_venue_str, tgt_surface_str, target_dist,
+                        run_venue, run_surface, run_dist,
+                    )
+                    remapped = self._remap_sections_reference_based(
+                        run_sections_raw, run_dist, run_venue, run_surface,
+                        target_dist, tgt_venue_str, tgt_surface_str, scale,
+                    )
+                    if remapped:
+                        remapped_runs_list.append(remapped)
+                for i in range(1, 7):
+                    if remapped_runs_list:
+                        vals = [r.get(i) for r in remapped_runs_list if r.get(i) is not None]
+                        avg_sections[i] = round(float(np.mean(vals)), 3) if vals else None
+                    else:
+                        avg_sections[i] = None
+                    df.at[index, f'近3仗第 {i} 段平均'] = avg_sections[i] if i <= target_section_count else None
+            else:
+                # Levels 1-2: all runs are at the same distance — average sections directly.
+                # For level 2 (same distance, different venue), apply a venue/surface time
+                # scale to the averaged sections afterwards.
+                for i in range(1, 7):
                     section_series = pd.to_numeric(recent_runs.get(f'第 {i} 段'), errors='coerce')
                     if has_ground_data:
                         adjusted_values = []
@@ -472,9 +889,25 @@ class HKJCRacecardDownloader:
                     else:
                         avg_value = section_series.mean()
                     avg_sections[i] = round(float(avg_value), 3) if pd.notna(avg_value) else None
-                else:
-                    avg_sections[i] = None
-                df.at[index, f'近3仗第 {i} 段平均'] = avg_sections[i]
+                    df.at[index, f'近3仗第 {i} 段平均'] = avg_sections[i] if i <= target_section_count else None
+
+                if fallback_level == 2 and target_dist is not None:
+                    src_venue = str(recent_runs['馬場'].mode().iloc[0]) if '馬場' in recent_runs.columns else tgt_venue_str
+                    src_surface = str(recent_runs['泥草'].mode().iloc[0]) if '泥草' in recent_runs.columns else tgt_surface_str
+                    eff_src_dist = source_dist if source_dist is not None else target_dist
+                    if eff_src_dist is not None:
+                        scale = self._get_distance_scale_factor(
+                            tgt_venue_str, tgt_surface_str, target_dist,
+                            src_venue, src_surface, eff_src_dist,
+                        )
+                        remapped = self._remap_sections_reference_based(
+                            avg_sections, eff_src_dist, src_venue, src_surface,
+                            target_dist, tgt_venue_str, tgt_surface_str, scale,
+                        )
+                        if remapped:
+                            avg_sections = remapped
+                            for i in range(1, target_section_count + 1):
+                                df.at[index, f'近3仗第 {i} 段平均'] = avg_sections.get(i)
 
             jt_rate = self._calculate_jockey_trainer_rate_numeric(
                 str(row.get('騎師', '') or '').strip(),
@@ -490,17 +923,18 @@ class HKJCRacecardDownloader:
             for i in range(1, 7):
                 df.at[index, f'預估今場第 {i} 段'] = predicted_sections.get(i)
 
-            head = [predicted_sections.get(1), predicted_sections.get(2)]
-            tail_start = max(1, target_section_count - 1)
-            tail = [predicted_sections.get(i) for i in range(tail_start, target_section_count + 1)]
-            valid_head = [v for v in head if v is not None]
-            valid_tail = [v for v in tail if v is not None]
-            valid_all = [predicted_sections.get(i) for i in range(1, target_section_count + 1) if predicted_sections.get(i) is not None]
+            valid_all = [predicted_sections.get(i) for i in range(1, target_section_count + 1)
+                         if predicted_sections.get(i) is not None]
+            race_dist = self._to_float(row.get('路程'))
+            head_800, tail_800 = self._compute_head_tail_800(
+                predicted_sections, race_dist, target_section_count
+            )
 
             df.at[index, '近3仗樣本數'] = sample_count
-            df.at[index, '預估頭段(第1+2段)'] = round(sum(valid_head), 3) if valid_head else None
-            df.at[index, '預估末段(最後2段)'] = round(sum(valid_tail), 3) if valid_tail else None
-            df.at[index, '預估末段(第5+6段)'] = df.at[index, '預估末段(最後2段)']
+            df.at[index, '近況來源'] = _FALLBACK_LABELS.get(fallback_level, '-')
+            df.at[index, '預估頭段(第1+2段)'] = head_800
+            df.at[index, '預估末段(最後2段)'] = tail_800
+            df.at[index, '預估末段(第5+6段)'] = tail_800
             df.at[index, '預估總段速'] = round(sum(valid_all), 3) if valid_all else None
 
         df['騎練合作上名率'] = df.apply(
@@ -571,7 +1005,7 @@ class HKJCRacecardDownloader:
         required_columns = [
             '場次', '班次', '路程', '馬匹編號', '馬名', '騎師', '練馬師', '騎練合作上名率', '評分',
             '負磅', '檔位', '最佳時間',
-            '近3仗樣本數',
+            '近3仗樣本數', '近況來源',
             '近3仗第 1 段平均', '近3仗第 2 段平均', '近3仗第 3 段平均',
             '近3仗第 4 段平均', '近3仗第 5 段平均', '近3仗第 6 段平均',
             '預估今場第 1 段', '預估今場第 2 段', '預估今場第 3 段',
@@ -583,6 +1017,35 @@ class HKJCRacecardDownloader:
         existing_columns = [col for col in required_columns if col in df.columns]
         df_terry = df[existing_columns].copy()
         return df_terry
+
+    def _apply_fallback_italic(self, writer: pd.ExcelWriter, sheet_name: str, df: pd.DataFrame) -> None:
+        """Apply italic font to prediction columns for horses whose data come from
+        a cross-distance or cross-venue fallback (近況來源 != '同場同程')."""
+        if '近況來源' not in df.columns:
+            return
+        italic_cols = (
+            [f'近3仗第 {i} 段平均' for i in range(1, 7)] +
+            [f'預估今場第 {i} 段' for i in range(1, 7)] +
+            ['預估頭段(第1+2段)', '預估末段(最後2段)', '預估末段(第5+6段)', '預估總段速']
+        )
+        existing_italic_cols = [c for c in italic_cols if c in df.columns]
+        if not existing_italic_cols:
+            return
+        ws = writer.book[sheet_name]
+        for row_idx, source_val in enumerate(df['近況來源'].tolist(), start=2):
+            if str(source_val) == '同場同程':
+                continue
+            for col_name in existing_italic_cols:
+                col_idx = df.columns.get_loc(col_name) + 1
+                cell = ws.cell(row=row_idx, column=col_idx)
+                existing_font = cell.font
+                cell.font = Font(
+                    name=existing_font.name,
+                    size=existing_font.size,
+                    bold=existing_font.bold,
+                    italic=True,
+                    color=existing_font.color,
+                )
 
     def _highlight_fastest_section_cells(self, writer: pd.ExcelWriter, sheet_name: str, df: pd.DataFrame) -> None:
         """Highlight the fastest value in each predicted section column with yellow fill."""
@@ -653,6 +1116,7 @@ class HKJCRacecardDownloader:
                         sheet_name = f"Race_{race_no}"
                         df.to_excel(writer, sheet_name=sheet_name, index=False)
                         self._highlight_fastest_section_cells(writer, sheet_name, df)
+                        self._apply_fallback_italic(writer, sheet_name, df)
                         standard_sheets_created += 1
                 except FileNotFoundError:
                     logger.warning(f"File Racecard_{date_str}_{race_no}.xlsx not found")
@@ -675,6 +1139,7 @@ class HKJCRacecardDownloader:
                             sheet_name = f"Race_{race_no}"
                             df_terry.to_excel(writer, sheet_name=sheet_name, index=False)
                             self._highlight_fastest_section_cells(writer, sheet_name, df_terry)
+                            self._apply_fallback_italic(writer, sheet_name, df_terry)
                             terry_sheets_created += 1
                 except FileNotFoundError:
                     logger.warning(f"File Racecard_{date_str}_{race_no}.xlsx not found for Terry format")
@@ -693,7 +1158,7 @@ class HKJCRacecardDownloader:
         """Create a dedicated Excel file for simulated running positions and generate visualization plots."""
         positioning_columns = [
             '場次', '馬匹編號', '馬名', '評分', '負磅', '檔位', '騎師', '練馬師', '騎練合作上名率',
-            '近3仗樣本數',
+            '近3仗樣本數', '近況來源',
             '預估今場第 1 段', '預估今場第 2 段', '預估今場第 3 段',
             '預估今場第 4 段', '預估今場第 5 段', '預估今場第 6 段',
             '預估頭段(第1+2段)', '預估末段(最後2段)', '預估總段速', '勝出機率', '公平賠率(扣稅)',
@@ -712,6 +1177,7 @@ class HKJCRacecardDownloader:
                 race_df = prediction_map[race_no].head(4).copy()
                 horse_nos = race_df['馬匹編號'].astype(str).tolist()
                 horse_names = race_df['馬名'].fillna('').astype(str).tolist()
+                sources = race_df['近況來源'].fillna('').astype(str).tolist() if '近況來源' in race_df.columns else []
                 top_win_prob = ''
                 top_fair_odds = ''
                 if '勝出機率' in race_df.columns and len(race_df) > 0:
@@ -726,6 +1192,8 @@ class HKJCRacecardDownloader:
                 while len(horse_nos) < 4:
                     horse_nos.append('')
                     horse_names.append('')
+                while len(sources) < 4:
+                    sources.append('')
 
                 row: Dict[str, str] = {'場次': f'第{race_no}場'}
                 for rank_idx in range(4):
@@ -733,6 +1201,9 @@ class HKJCRacecardDownloader:
                     row[f'第{rank_idx + 1}名馬名'] = horse_names[rank_idx]
                 row['第1名勝出機率'] = top_win_prob
                 row['第1名公平賠率(扣稅)'] = top_fair_odds
+                # Source columns go LAST so the visible col % 2 pattern is undisturbed.
+                for rank_idx in range(4):
+                    row[f'_src_{rank_idx + 1}'] = sources[rank_idx]
                 rows.append(row)
 
             return pd.DataFrame(rows)
@@ -904,6 +1375,8 @@ class HKJCRacecardDownloader:
                     # Build prediction source sorted by 預估總段速 (smaller = faster).
                     if {'馬匹編號', '馬名', '預估總段速'}.issubset(df.columns):
                         pred_df = df[['馬匹編號', '馬名', '檔位', '預估總段速']].copy()
+                        if '近況來源' in df.columns:
+                            pred_df['近況來源'] = df['近況來源'].values
                         if '勝出機率' in df.columns:
                             pred_df['勝出機率'] = pd.to_numeric(df['勝出機率'], errors='coerce')
                         if '公平賠率(扣稅)' in df.columns:
@@ -921,6 +1394,8 @@ class HKJCRacecardDownloader:
                             keep_cols.append('勝出機率')
                         if '公平賠率(扣稅)' in pred_df.columns:
                             keep_cols.append('公平賠率(扣稅)')
+                        if '近況來源' in pred_df.columns:
+                            keep_cols.append('近況來源')
                         prediction_data[race_no] = pred_df[keep_cols].reset_index(drop=True)
 
                     if {'馬匹編號', '馬名'}.issubset(df.columns):
@@ -947,6 +1422,7 @@ class HKJCRacecardDownloader:
                     sheet_name = f"Race_{race_no}"
                     df_positioning.to_excel(writer, sheet_name=sheet_name, index=False)
                     self._highlight_fastest_section_cells(writer, sheet_name, df_positioning)
+                    self._apply_fallback_italic(writer, sheet_name, df_positioning)
                     sheets_created += 1
                 except FileNotFoundError:
                     logger.warning(f"File Racecard_{date_str}_{race_no}.xlsx not found for positioning format")
@@ -960,11 +1436,33 @@ class HKJCRacecardDownloader:
             elif prediction_data:
                 prediction_sheet_df = build_prediction_dataframe(prediction_data)
                 prediction_sheet_df.to_excel(writer, sheet_name='prediction', index=False)
+                # Visible column count excludes hidden source-tracking columns (_src_N).
+                visible_col_count = sum(1 for c in prediction_sheet_df.columns if not c.startswith('_src_'))
                 style_prediction_sheet(
                     writer,
                     max_row=prediction_sheet_df.shape[0] + 1,
-                    max_col=prediction_sheet_df.shape[1]
+                    max_col=visible_col_count,
                 )
+                # Italic horse names for cross-distance / cross-venue fallback horses.
+                ws_pred = writer.book['prediction']
+                for rank_idx in range(1, 5):
+                    src_col = f'_src_{rank_idx}'
+                    name_col = f'第{rank_idx}名馬名'
+                    if src_col not in prediction_sheet_df.columns or name_col not in prediction_sheet_df.columns:
+                        continue
+                    name_col_idx = prediction_sheet_df.columns.get_loc(name_col) + 1
+                    for row_data_idx, src_val in enumerate(prediction_sheet_df[src_col].tolist(), start=2):
+                        if str(src_val) not in ('同場同程', '', 'nan'):
+                            cell = ws_pred.cell(row=row_data_idx, column=name_col_idx)
+                            ef = cell.font
+                            cell.font = Font(name=ef.name, size=ef.size, bold=ef.bold, italic=True, color=ef.color)
+                # Hide source-tracking columns from the sheet.
+                for rank_idx in range(1, 5):
+                    src_col = f'_src_{rank_idx}'
+                    if src_col in prediction_sheet_df.columns:
+                        src_col_idx = prediction_sheet_df.columns.get_loc(src_col) + 1
+                        col_letter = ws_pred.cell(row=1, column=src_col_idx).column_letter
+                        ws_pred.column_dimensions[col_letter].hidden = True
 
                 if fastest_800_data:
                     fastest_800_sheet_df = build_fastest_800_dataframe(fastest_800_data)
@@ -1041,8 +1539,8 @@ class HKJCRacecardDownloader:
     
 def main():
     # Configuration
-    race_date = date(2026, 5, 24)
-    race_course = "ST"  # ST / HV
+    race_date = date(2026, 5, 27)
+    race_course = "HV"  # ST / HV
     
     # Create downloader and process
     downloader = HKJCRacecardDownloader(race_date, race_course)

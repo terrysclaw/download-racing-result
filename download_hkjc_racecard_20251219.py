@@ -780,8 +780,8 @@ class HKJCRacecardDownloader:
     
 def main():
     # Configuration
-    race_date = date(2026, 5, 9)
-    race_course = "ST"  # ST / HV
+    race_date = date(2026, 5, 27)
+    race_course = "HV"  # ST / HV
     
     # Create downloader and process
     downloader = HKJCRacecardDownloader(race_date, race_course)
